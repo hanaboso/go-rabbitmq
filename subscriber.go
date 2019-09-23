@@ -250,6 +250,7 @@ func (s *subscriber) bindQueue(conf QueueConfig) error {
 }
 
 func (s *subscriber) Close() error {
+	// TODO can't be closed twice
 	close(s.done)
 	return s.ch.Close()
 }

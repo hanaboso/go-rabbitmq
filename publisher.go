@@ -39,9 +39,10 @@ type publisher struct {
 	notifyConfirm   chan amqp.Confirmation
 	logger          logger
 	deliveryMode    DeliveryMode
-	resendDelay     time.Duration
 	done            chan bool
-	reconnectDelay  time.Duration
+	// TODO why two delays?
+	reconnectDelay time.Duration
+	resendDelay    time.Duration
 }
 
 func NewPublisher(conn *Connection, opts ...func(*publisher)) (PublisherCtx, error) {
@@ -174,6 +175,7 @@ func (p *publisher) publish(exchange, key string, data []byte, opts ...func(*amq
 }
 
 func (p *publisher) Close() error {
+	// TODO can't be closed twice
 	close(p.done)
 	return p.ch.Close()
 }

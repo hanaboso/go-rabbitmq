@@ -2,6 +2,7 @@ package rabbitmq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -19,16 +20,12 @@ func SetLogger(log Logger, level LoggingLevel) func(*Connection) {
 }
 
 type Connection struct {
-	conn  *amqp.Connection
-	connM sync.RWMutex
-
+	conn            *amqp.Connection
+	connM           sync.RWMutex
 	logger          logger
 	notifyConnClose chan *amqp.Error
 	reconnectDelay  time.Duration
-
-	done chan bool
-
-	publishers []publisher
+	done            chan bool
 }
 
 func Connect(dsn string, opts ...func(*Connection)) (*Connection, error) {
@@ -70,10 +67,44 @@ func ConnectCtx(ctx context.Context, dsn string, opts ...func(*Connection)) (*Co
 	return &conn, nil
 }
 
+func (c *Connection) Close() error {
+	// TODO can't be closed twice
+	close(c.done)
+
+	c.connM.Lock()
+	defer c.connM.Unlock()
+
+	if c.conn == nil {
+		return nil
+	}
+	return c.conn.Close()
+}
+
+func (c *Connection) ExchangeDeclare(name, kind string, durable, autoDelete bool) error {
+	ch, err := c.connection().Channel()
+	if err != nil {
+		return err
+	}
+	return ch.ExchangeDeclare(
+		name,               // name
+		amqp.ExchangeTopic, // type
+		durable,            // durable
+		autoDelete,         // auto-deleted
+		false,              // internal
+		false,              // no-wait
+		nil,                // arguments
+	)
+}
+
 func (c *Connection) handleReconnect(ctx context.Context, dsn string) error {
 	for {
 		conn, err := amqp.Dial(dsn)
 		if err != nil {
+			var aErr *amqp.Error
+			if errors.As(err, &aErr) && aErr.Code == amqp.AccessRefused {
+				return err
+			}
+
 			c.logger.Debugf("failed to dial connection: %v", err)
 
 			select {
@@ -105,16 +136,4 @@ func (c *Connection) changeConnection(connection *amqp.Connection) {
 	c.conn = connection
 	c.notifyConnClose = make(chan *amqp.Error)
 	c.conn.NotifyClose(c.notifyConnClose)
-}
-
-func (c *Connection) Close() error {
-	close(c.done)
-
-	c.connM.Lock()
-	defer c.connM.Unlock()
-
-	if c.conn == nil {
-		return nil
-	}
-	return c.conn.Close()
 }
