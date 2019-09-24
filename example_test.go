@@ -21,7 +21,7 @@ func ExamplePublish() {
 	}
 	defer conn.Close()
 
-	pub, err := rabbitmq.NewPublisher(conn, rabbitmq.SetDeliveryMode(rabbitmq.Persistent))
+	pub, err := rabbitmq.NewPublisher(conn, rabbitmq.SetPublishingDeliveryMode(rabbitmq.Persistent))
 	if err != nil {
 		fmt.Printf("failed to create publisher: %v", err)
 		return

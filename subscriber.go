@@ -104,24 +104,6 @@ func (s *subscriber) changeChannel(channel *amqp.Channel) {
 	s.ch.NotifyClose(s.notifyChanClose)
 }
 
-type Subscription struct {
-	Queue     string
-	Consumer  string
-	AutoAck   bool
-	Exclusive bool
-	NoLocal   bool
-	NoWait    bool
-	Args      ArgumentsTable
-}
-
-func SetSubscriptionConsumer(consumer string) func(*Subscription) {
-	return func(subscription *Subscription) {
-		subscription.Consumer = consumer
-	}
-}
-
-// TODO define more options
-
 func (s *subscriber) Subscribe(queue string, opts ...func(*Subscription)) (<-chan Message, error) {
 	return s.SubscribeCtx(context.Background(), queue, opts...)
 }

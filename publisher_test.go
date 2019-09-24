@@ -36,7 +36,7 @@ func TestPublish(t *testing.T) {
 	)
 	nilErr(t, conn.ExchangeDeclare(exchangeName, rabbitmq.ExchangeTopic, rabbitmq.SetExchangeDurability(true)), "exchange declaration failed")
 
-	pub, err := rabbitmq.NewPublisher(conn, rabbitmq.SetDeliveryMode(rabbitmq.Persistent))
+	pub, err := rabbitmq.NewPublisher(conn)
 	nilErr(t, err)
 	defer pub.Close()
 
@@ -47,5 +47,11 @@ func TestPublish(t *testing.T) {
 	var buff bytes.Buffer
 	nilErr(t, json.NewEncoder(&buff).Encode(msg))
 
-	nilErr(t, pub.PublishCtx(ctx, exchangeName, routingKey, buff.Bytes()))
+	nilErr(t, pub.PublishCtx(ctx, exchangeName, routingKey, buff.Bytes()),
+		rabbitmq.SetPublishingDeliveryMode(rabbitmq.Persistent),
+		rabbitmq.SetPublishingContentType("application/json"),
+		func(p *rabbitmq.Publishing) {
+			p.ContentEncoding = "utf-8"
+		},
+	)
 }

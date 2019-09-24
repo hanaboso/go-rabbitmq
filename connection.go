@@ -82,24 +82,6 @@ func (c *Connection) Close() error {
 	return c.conn.Close()
 }
 
-type Exchange struct {
-	Name       string
-	Type       ExchangeType
-	Durable    bool
-	AutoDelete bool
-	Internal   bool
-	NoWait     bool
-	Args       ArgumentsTable
-}
-
-func SetExchangeDurability(durable bool) func(*Exchange) {
-	return func(ex *Exchange) {
-		ex.Durable = durable
-	}
-}
-
-// TODO define more options
-
 func (c *Connection) ExchangeDeclare(name string, kind ExchangeType, opts ...func(*Exchange)) error {
 	return c.ExchangeDeclareCtx(context.Background(), name, kind, opts...)
 }
@@ -144,29 +126,6 @@ func (c *Connection) exchangeDeclare(exchange Exchange) error {
 		amqp.Table(exchange.Args), // arguments
 	)
 }
-
-type Queue struct {
-	Name       string
-	Durable    bool
-	AutoDelete bool
-	Exclusive  bool
-	NoWait     bool
-	Args       ArgumentsTable
-}
-
-func SetQueueDurability(durable bool) func(*Queue) {
-	return func(config *Queue) {
-		config.Durable = durable
-	}
-}
-
-func SetQueueAutoDelete(autoDelete bool) func(*Queue) {
-	return func(config *Queue) {
-		config.AutoDelete = autoDelete
-	}
-}
-
-// TODO define more options
 
 func (c *Connection) QueueDeclare(name string, opts ...func(*Queue)) (Queue, error) {
 	return c.QueueDeclareCtx(context.Background(), name, opts...)
@@ -221,17 +180,27 @@ func (c *Connection) queueDeclare(queue Queue) (Queue, error) {
 
 // TODO add config for `noWait` and `args`
 
-func (c *Connection) QueueBind(name, key, exchange string) error {
-	return c.QueueBindCtx(context.Background(), name, key, exchange)
+func (c *Connection) QueueBind(name, key, exchange string, opts ...func(*Binding)) error {
+	return c.QueueBindCtx(context.Background(), name, key, exchange, opts...)
 }
 
-func (c *Connection) QueueBindCtx(ctx context.Context, name, key, exchange string) error {
+func (c *Connection) QueueBindCtx(ctx context.Context, name, key, exchange string, opts ...func(*Binding)) error {
+	binding := Binding{
+		Name:       name,
+		RoutingKey: key,
+		Exchange:   exchange,
+	}
+
+	for _, opt := range opts {
+		opt(&binding)
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(c.reconnectDelay):
-			if err := c.queueBind(name, key, exchange); err != nil {
+			if err := c.queueBind(binding); err != nil {
 				c.logger.Debug(err)
 				continue
 			}
@@ -240,7 +209,7 @@ func (c *Connection) QueueBindCtx(ctx context.Context, name, key, exchange strin
 	}
 }
 
-func (c *Connection) queueBind(name, key, exchange string) error {
+func (c *Connection) queueBind(binding Binding) error {
 	ch, err := c.connection().Channel()
 	if err != nil {
 		return err
@@ -248,11 +217,11 @@ func (c *Connection) queueBind(name, key, exchange string) error {
 	defer ch.Close()
 
 	return ch.QueueBind(
-		name,     // queue name
-		key,      // routing key
-		exchange, // exchange
-		false,
-		nil,
+		binding.Name,       // queue name
+		binding.RoutingKey, // routing key
+		binding.Exchange,   // exchange
+		binding.NoWait,
+		amqp.Table(binding.Args),
 	)
 }
 

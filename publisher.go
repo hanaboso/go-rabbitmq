@@ -8,27 +8,14 @@ import (
 	"github.com/streadway/amqp"
 )
 
-type DeliveryMode uint8
-
-const (
-	Transient  DeliveryMode = 1
-	Persistent DeliveryMode = 2
-)
-
-func SetDeliveryMode(mode DeliveryMode) func(*publisher) {
-	return func(p *publisher) {
-		p.deliveryMode = mode
-	}
-}
-
 type Publisher interface {
-	Publish(exchange, key string, data []byte, opts ...func(*amqp.Publishing)) error
+	Publish(exchange, key string, data []byte, opts ...func(*Publishing)) error
 	Close() error
 }
 
 type PublisherCtx interface {
 	Publisher
-	PublishCtx(ctx context.Context, exchange, key string, data []byte, opts ...func(*amqp.Publishing)) error
+	PublishCtx(ctx context.Context, exchange, key string, data []byte, opts ...func(*Publishing)) error
 }
 
 type publisher struct {
@@ -38,7 +25,6 @@ type publisher struct {
 	notifyChanClose chan *amqp.Error
 	notifyConfirm   chan amqp.Confirmation
 	logger          logger
-	deliveryMode    DeliveryMode
 	done            chan bool
 	// TODO why two delays?
 	reconnectDelay time.Duration
@@ -128,11 +114,11 @@ func (p *publisher) changeChannel(channel *amqp.Channel) {
 	p.ch.NotifyPublish(p.notifyConfirm)
 }
 
-func (p *publisher) Publish(exchange, key string, data []byte, opts ...func(*amqp.Publishing) /*TODO wrapper, maybe config struct*/) error {
+func (p *publisher) Publish(exchange, key string, data []byte, opts ...func(*Publishing) /*TODO wrapper, maybe config struct*/) error {
 	return p.PublishCtx(context.Background(), exchange, key, data, opts...)
 }
 
-func (p *publisher) PublishCtx(ctx context.Context, exchange, key string, data []byte, opts ...func(*amqp.Publishing) /*TODO wrapper, maybe config struct*/) error {
+func (p *publisher) PublishCtx(ctx context.Context, exchange, key string, data []byte, opts ...func(*Publishing) /*TODO wrapper, maybe config struct*/) error {
 	for {
 		if err := p.publish(exchange, key, data, opts...); err != nil {
 			p.logger.Debugf("Push failed: %v", err)
@@ -159,19 +145,40 @@ func (p *publisher) PublishCtx(ctx context.Context, exchange, key string, data [
 	}
 }
 
-func (p *publisher) publish(exchange, key string, data []byte, opts ...func(*amqp.Publishing) /*TODO wrapper, maybe config struct*/) error {
-	pub := amqp.Publishing{
-		DeliveryMode: uint8(p.deliveryMode),
-		Timestamp:    time.Now(),
-		ContentType:  "text/plain",
-		Body:         data,
+func (p *publisher) publish(exchange, key string, data []byte, opts ...func(*Publishing) /*TODO wrapper, maybe config struct*/) error {
+	pub := Publishing{
+		ContentType: "text/plain",
+		Timestamp:   time.Now(),
+		Exchange:    exchange,
+		RoutingKey:  key,
+		Body:        data,
 	}
 
 	for _, opt := range opts {
 		opt(&pub)
 	}
 
-	return p.channel().Publish(exchange, key, false, false, pub)
+	return p.channel().Publish(
+		pub.Exchange,
+		pub.RoutingKey,
+		pub.Mandatory,
+		pub.Immediate,
+		amqp.Publishing{
+			Headers:         amqp.Table(pub.Headers),
+			ContentType:     pub.ContentType,
+			ContentEncoding: pub.ContentEncoding,
+			DeliveryMode:    uint8(pub.DeliveryMode),
+			Priority:        pub.Priority,
+			CorrelationId:   pub.CorrelationId,
+			ReplyTo:         pub.ReplyTo,
+			Expiration:      pub.Expiration,
+			MessageId:       pub.MessageId,
+			Timestamp:       pub.Timestamp,
+			Type:            pub.Type,
+			UserId:          pub.UserId,
+			AppId:           pub.AppId,
+			Body:            pub.Body,
+		})
 }
 
 func (p *publisher) Close() error {
