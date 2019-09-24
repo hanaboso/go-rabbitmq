@@ -6,6 +6,17 @@ import (
 	"github.com/streadway/amqp"
 )
 
+type ExchangeType string
+
+const (
+	ExchangeDirect  ExchangeType = "direct"
+	ExchangeFanout  ExchangeType = "fanout"
+	ExchangeTopic   ExchangeType = "topic"
+	ExchangeHeaders ExchangeType = "headers"
+)
+
+type ArgumentsTable amqp.Table
+
 type Message struct {
 	delivery amqp.Delivery
 	// for io.Reader implementation

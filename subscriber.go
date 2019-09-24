@@ -10,13 +10,13 @@ import (
 )
 
 type Subscriber interface {
-	Subscribe(conf QueueConfig) (<-chan Message, error)
+	Subscribe(queue string, opts ...func(*Subscription)) (<-chan Message, error)
 	Close() error
 }
 
 type SubscriberCtx interface {
 	Subscriber
-	SubscribeCtx(ctx context.Context, conf QueueConfig) (<-chan Message, error)
+	SubscribeCtx(ctx context.Context, queue string, opts ...func(*Subscription)) (<-chan Message, error)
 }
 
 type subscriber struct {
@@ -104,56 +104,49 @@ func (s *subscriber) changeChannel(channel *amqp.Channel) {
 	s.ch.NotifyClose(s.notifyChanClose)
 }
 
-type QueueConfig struct {
-	Name string
-	// setup for binding
-	// ex.
-	// routing := map[string][]string{
-	//     "exchange-one": {
-	//         "routing.key.one",
-	//         "routing.key.two",
-	//     },
-	//     "exchange-two": {
-	//         "routing.key.one",
-	//         "routing.key.two",
-	//     },
-	// }
-	RoutingKeys map[string][]string
-	Consumer    string
-	Durable     bool
-	AutoDelete  bool
-	Exclusive   bool
-	AutoAck     bool
-	NoLocal     bool
+type Subscription struct {
+	Queue     string
+	Consumer  string
+	AutoAck   bool
+	Exclusive bool
+	NoLocal   bool
+	NoWait    bool
+	Args      ArgumentsTable
 }
 
-func (s *subscriber) Subscribe(conf QueueConfig) (<-chan Message, error) {
-	return s.SubscribeCtx(context.Background(), conf)
+func SetSubscriptionConsumer(consumer string) func(*Subscription) {
+	return func(subscription *Subscription) {
+		subscription.Consumer = consumer
+	}
 }
 
-func (s *subscriber) SubscribeCtx(ctx context.Context, conf QueueConfig) (<-chan Message, error) {
-	if err := s.declareExchange(conf); err != nil {
-		return nil, err
+// TODO define more options
+
+func (s *subscriber) Subscribe(queue string, opts ...func(*Subscription)) (<-chan Message, error) {
+	return s.SubscribeCtx(context.Background(), queue, opts...)
+}
+
+func (s *subscriber) SubscribeCtx(ctx context.Context, queue string, opts ...func(*Subscription)) (<-chan Message, error) {
+	conf := Subscription{
+		Queue: queue,
 	}
-	if err := s.declareQueue(conf); err != nil {
-		return nil, err
+	for _, opt := range opts {
+		opt(&conf)
 	}
-	if err := s.bindQueue(conf); err != nil {
-		return nil, err
-	}
+
 	ch := make(chan Message)
 	go func() {
 		defer close(ch)
 
 		for {
 			msgs, err := s.channel().Consume(
-				conf.Name,      // queue
-				conf.Consumer,  // consumer
-				conf.AutoAck,   // auto-ack
-				conf.Exclusive, // exclusive
-				conf.NoLocal,   // no-local
-				false,          // no-wait
-				nil,            // args
+				conf.Queue,            // queue
+				conf.Consumer,         // consumer
+				conf.AutoAck,          // auto-ack
+				conf.Exclusive,        // exclusive
+				conf.NoLocal,          // no-local
+				conf.NoWait,           // no-wait
+				amqp.Table(conf.Args), // args
 			)
 			if err != nil {
 				s.logger.Debugf("failed to start consuming: %v", err)
@@ -193,60 +186,6 @@ func (s *subscriber) consume(ctx context.Context, src <-chan amqp.Delivery, dst 
 			return fmt.Errorf("subscriber is done")
 		}
 	}
-}
-
-func (s *subscriber) declareExchange(conf QueueConfig) error {
-	for exchange, _ := range conf.RoutingKeys {
-		if len(exchange) == 0 {
-			continue
-		}
-		if err := s.channel().ExchangeDeclare(
-			exchange,           // name
-			amqp.ExchangeTopic, // type
-			conf.Durable,       // durable
-			conf.AutoDelete,    // auto-deleted
-			false,              // internal
-			false,              // no-wait
-			nil,                // arguments
-		); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (s *subscriber) declareQueue(conf QueueConfig) error {
-	_, err := s.channel().QueueDeclare(
-		conf.Name,       // name
-		conf.Durable,    // durable
-		conf.AutoDelete, // delete when unused
-		conf.Exclusive,  // exclusive
-		false,           // no-wait
-		nil,             // arguments
-	)
-	return err
-}
-
-func (s *subscriber) bindQueue(conf QueueConfig) error {
-	for exchange, keys := range conf.RoutingKeys {
-		if len(exchange) == 0 {
-			continue
-		}
-		for _, key := range keys {
-			if err := s.channel().QueueBind(
-				conf.Name, // queue name
-				key,       // routing key
-				exchange,  // exchange
-				false,
-				nil,
-			); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
 }
 
 func (s *subscriber) Close() error {
