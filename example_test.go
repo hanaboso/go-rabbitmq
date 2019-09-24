@@ -21,7 +21,7 @@ func ExamplePublish() {
 	}
 	defer conn.Close()
 
-	pub, err := rabbitmq.NewPublisher(conn, rabbitmq.SetPublishingDeliveryMode(rabbitmq.Persistent))
+	pub, err := rabbitmq.NewPublisher(conn)
 	if err != nil {
 		fmt.Printf("failed to create publisher: %v", err)
 		return
@@ -38,7 +38,9 @@ func ExamplePublish() {
 		return
 	}
 
-	if err := pub.Publish("", "my.routing.key", buff.Bytes()); err != nil {
+	if err := pub.Publish("", "my.routing.key", buff.Bytes(),
+		rabbitmq.SetPublishingDeliveryMode(rabbitmq.Persistent),
+	); err != nil {
 		fmt.Printf("failed to publish: %v", err)
 		return
 	}

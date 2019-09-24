@@ -161,7 +161,7 @@ func (s *subscriber) consume(ctx context.Context, src <-chan amqp.Delivery, dst 
 				// channel is closed, but it will be logged as closed connection
 				return nil
 			}
-			dst <- Message{delivery: msg}
+			dst <- Message{Delivery: msg}
 		case <-ctx.Done():
 			return fmt.Errorf("canceled by context: %w", ctx.Err())
 		case <-s.done:

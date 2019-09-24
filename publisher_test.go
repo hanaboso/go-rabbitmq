@@ -47,11 +47,11 @@ func TestPublish(t *testing.T) {
 	var buff bytes.Buffer
 	nilErr(t, json.NewEncoder(&buff).Encode(msg))
 
-	nilErr(t, pub.PublishCtx(ctx, exchangeName, routingKey, buff.Bytes()),
+	nilErr(t, pub.PublishCtx(ctx, exchangeName, routingKey, buff.Bytes(),
 		rabbitmq.SetPublishingDeliveryMode(rabbitmq.Persistent),
 		rabbitmq.SetPublishingContentType("application/json"),
 		func(p *rabbitmq.Publishing) {
 			p.ContentEncoding = "utf-8"
 		},
-	)
+	), "failed to publish message")
 }
