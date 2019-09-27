@@ -2,6 +2,7 @@ package rabbitmq
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -122,6 +123,9 @@ func (p *publisher) PublishCtx(ctx context.Context, exchange, key string, data [
 	for {
 		if err := p.publish(exchange, key, data, opts...); err != nil {
 			p.logger.Debugf("Push failed: %v", err)
+			if !errors.Is(err, &amqp.Error{}) {
+				return err
+			}
 			select {
 			case <-ctx.Done():
 				p.logger.Debug("publish canceled by context")

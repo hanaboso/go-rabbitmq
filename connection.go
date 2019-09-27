@@ -10,7 +10,7 @@ import (
 	"github.com/streadway/amqp"
 )
 
-func SetLogger(log Logger, level LoggingLevel) func(*Connection) {
+func WithLogger(log Logger, level LoggingLevel) func(*Connection) {
 	return func(connection *Connection) {
 		connection.logger = logger{
 			Logger: log,

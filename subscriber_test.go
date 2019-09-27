@@ -18,7 +18,7 @@ func TestSubscribe(t *testing.T) {
 
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
 	conn, err := rabbitmq.ConnectCtx(ctx, dataSourceName,
-		rabbitmq.SetLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
+		rabbitmq.WithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
 	)
 	nilErr(t, err, "connection failed")
 	defer conn.Close()
