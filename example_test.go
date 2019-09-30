@@ -10,7 +10,7 @@ import (
 	"github.com/Hanaboso/rabbitmq"
 )
 
-func ExamplePublish() {
+func ExamplePublisher_Publish() {
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
 	conn, err := rabbitmq.Connect(dataSourceName,
 		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
@@ -46,7 +46,7 @@ func ExamplePublish() {
 	}
 }
 
-func ExampleSubscribe() {
+func ExampleSubscriber_Subscribe() {
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
 	conn, err := rabbitmq.Connect(dataSourceName,
 		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),

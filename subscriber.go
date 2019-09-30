@@ -2,6 +2,7 @@ package rabbitmq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -9,11 +10,13 @@ import (
 	"github.com/streadway/amqp"
 )
 
+// Subscriber is interface that provides all necessary methods for subscribing.
 type Subscriber interface {
 	Subscribe(queue string, options ...func(*Subscription)) (<-chan Message, error)
 	Close() error
 }
 
+// SubscriberCtx is interface that provides all necessary methods for subscribing with context.
 type SubscriberCtx interface {
 	Subscriber
 	SubscribeCtx(ctx context.Context, queue string, options ...func(*Subscription)) (<-chan Message, error)
@@ -30,7 +33,14 @@ type subscriber struct {
 	reconnectDelay  time.Duration
 }
 
-func NewSubscriber(conn *Connection, options ...func(*subscriber)) (SubscriberCtx, error) {
+// NewSubscriber creates Subscriber that uses provided connection
+func NewSubscriber(conn *Connection, options ...func(*subscriber)) (Subscriber, error) {
+	return NewSubscriberCtx(context.Background(), conn, options...)
+}
+
+// NewSubscriberCtx creates SubscriberCtx that uses provided connection.
+// Subscriber reconnect doesn't rely on context.
+func NewSubscriberCtx(ctx context.Context, conn *Connection, options ...func(*subscriber)) (SubscriberCtx, error) {
 	s := subscriber{
 		connection:     conn,
 		logger:         conn.logger,
@@ -41,7 +51,9 @@ func NewSubscriber(conn *Connection, options ...func(*subscriber)) (SubscriberCt
 		option(&s)
 	}
 
-	s.handleReconnect()
+	if err := s.handleReconnect(ctx); err != nil {
+		return nil, err
+	}
 	go func() {
 		for {
 			select {
@@ -58,7 +70,9 @@ func NewSubscriber(conn *Connection, options ...func(*subscriber)) (SubscriberCt
 					return
 				}
 				s.logger.Debugf("channel closed: %v", err)
-				s.handleReconnect()
+				if err := s.handleReconnect(context.Background()); err != nil {
+					conn.logger.Debugf("reconnect error: %v", err)
+				}
 			}
 		}
 	}()
@@ -66,27 +80,30 @@ func NewSubscriber(conn *Connection, options ...func(*subscriber)) (SubscriberCt
 	return &s, nil
 }
 
-func (s *subscriber) handleReconnect() {
+func (s *subscriber) handleReconnect(ctx context.Context) error {
 	for {
 		ch, err := s.connection.connection().Channel()
 		if err != nil {
 			s.logger.Debugf("failed to open channel: %v", err)
 			select {
 			case <-s.connection.done:
-				s.logger.Debug("connection is done, closing publisher")
+				s.logger.Debug("connection is done, closing subscriber")
+				// closing self cause graceful shutdown by (*subscriber).done channel
 				if err := s.Close(); err != nil {
 					s.logger.Debugf("failed to close subscriber: %v", err)
 				}
 			case <-s.done:
 				s.logger.Debug("subscriber is done")
-				return
+				return errors.New("subscriber is done")
+			case <-ctx.Done():
+				return ctx.Err()
 			case <-time.After(s.reconnectDelay):
 			}
 			continue
 		}
 
 		s.changeChannel(ch)
-		break
+		return nil
 	}
 }
 
@@ -110,11 +127,11 @@ func (s *subscriber) Subscribe(queue string, options ...func(*Subscription)) (<-
 }
 
 func (s *subscriber) SubscribeCtx(ctx context.Context, queue string, options ...func(*Subscription)) (<-chan Message, error) {
-	conf := Subscription{
+	subscription := Subscription{
 		Queue: queue,
 	}
 	for _, option := range options {
-		option(&conf)
+		option(&subscription)
 	}
 
 	ch := make(chan Message)
@@ -123,13 +140,13 @@ func (s *subscriber) SubscribeCtx(ctx context.Context, queue string, options ...
 
 		for {
 			msgs, err := s.channel().Consume(
-				conf.Queue,            // queue
-				conf.Consumer,         // consumer
-				conf.AutoAck,          // auto-ack
-				conf.Exclusive,        // exclusive
-				conf.NoLocal,          // no-local
-				conf.NoWait,           // no-wait
-				amqp.Table(conf.Args), // args
+				subscription.Queue,            // queue
+				subscription.Consumer,         // consumer
+				subscription.AutoAck,          // auto-ack
+				subscription.Exclusive,        // exclusive
+				subscription.NoLocal,          // no-local
+				subscription.NoWait,           // no-wait
+				amqp.Table(subscription.Args), // args
 			)
 			if err != nil {
 				s.logger.Debugf("failed to start consuming: %v", err)

@@ -36,7 +36,7 @@ func TestPublish(t *testing.T) {
 	)
 	nilErr(t, conn.ExchangeDeclare(exchangeName, rabbitmq.ExchangeTopic, rabbitmq.ExchangeWithDurable(true)), "exchange declaration failed")
 
-	pub, err := rabbitmq.NewPublisher(conn)
+	pub, err := rabbitmq.NewPublisherCtx(ctx, conn)
 	nilErr(t, err)
 	defer pub.Close()
 

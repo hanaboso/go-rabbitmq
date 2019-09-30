@@ -10,11 +10,13 @@ import (
 	"github.com/streadway/amqp"
 )
 
+// Publisher is interface that provides all necessary methods for publishing.
 type Publisher interface {
 	Publish(exchange, key string, data []byte, options ...func(*Publishing)) error
 	Close() error
 }
 
+// PublisherCtx is interface that provides all necessary methods for publishing with context.
 type PublisherCtx interface {
 	Publisher
 	PublishCtx(ctx context.Context, exchange, key string, data []byte, options ...func(*Publishing)) error
@@ -32,7 +34,14 @@ type publisher struct {
 	reconnectDelay  time.Duration
 }
 
-func NewPublisher(conn *Connection, options ...func(*publisher)) (PublisherCtx, error) {
+// NewPublisher creates Publisher that uses provided connection
+func NewPublisher(conn *Connection, options ...func(*publisher)) (Publisher, error) {
+	return NewPublisherCtx(context.Background(), conn, options...)
+}
+
+// NewPublisherCtx creates PublisherCtx that uses provided connection.
+// Publisher reconnect doesn't rely on context.
+func NewPublisherCtx(ctx context.Context, conn *Connection, options ...func(*publisher)) (PublisherCtx, error) {
 	p := publisher{
 		connection:     conn,
 		logger:         conn.logger,
@@ -43,7 +52,9 @@ func NewPublisher(conn *Connection, options ...func(*publisher)) (PublisherCtx, 
 		option(&p)
 	}
 
-	p.handleReconnect()
+	if err := p.handleReconnect(ctx); err != nil {
+		return nil, err
+	}
 	go func() {
 		for {
 			select {
@@ -60,7 +71,9 @@ func NewPublisher(conn *Connection, options ...func(*publisher)) (PublisherCtx, 
 					return
 				}
 				p.logger.Debugf("channel closed: %v", err)
-				p.handleReconnect()
+				if err := p.handleReconnect(context.Background()); err != nil {
+					conn.logger.Debugf("reconnect error: %v", err)
+				}
 			}
 		}
 	}()
@@ -68,7 +81,7 @@ func NewPublisher(conn *Connection, options ...func(*publisher)) (PublisherCtx, 
 	return &p, nil
 }
 
-func (p *publisher) handleReconnect() {
+func (p *publisher) handleReconnect(ctx context.Context) error {
 	for {
 		ch, err := p.connection.connection().Channel()
 		if err != nil {
@@ -76,12 +89,15 @@ func (p *publisher) handleReconnect() {
 			select {
 			case <-p.connection.done:
 				p.logger.Debug("connection is done, closing publisher")
+				// closing self cause graceful shutdown by (*publisher).done channel
 				if err := p.Close(); err != nil {
 					p.logger.Debugf("failed to close publisher: %v", err)
 				}
 			case <-p.done:
 				p.logger.Debug("publisher is done")
-				return
+				return errors.New("subscriber is done")
+			case <-ctx.Done():
+				return ctx.Err()
 			case <-time.After(p.reconnectDelay):
 			}
 			continue
@@ -93,7 +109,7 @@ func (p *publisher) handleReconnect() {
 		}
 
 		p.changeChannel(ch)
-		break
+		return nil
 	}
 }
 
@@ -172,14 +188,14 @@ func (p *publisher) publish(exchange, key string, data []byte, options ...func(*
 			ContentEncoding: pub.ContentEncoding,
 			DeliveryMode:    uint8(pub.DeliveryMode),
 			Priority:        pub.Priority,
-			CorrelationId:   pub.CorrelationId,
+			CorrelationId:   pub.CorrelationID,
 			ReplyTo:         pub.ReplyTo,
 			Expiration:      pub.Expiration,
-			MessageId:       pub.MessageId,
+			MessageId:       pub.MessageID,
 			Timestamp:       pub.Timestamp,
 			Type:            pub.Type,
-			UserId:          pub.UserId,
-			AppId:           pub.AppId,
+			UserId:          pub.UserID,
+			AppId:           pub.AppID,
 			Body:            pub.Body,
 		})
 }

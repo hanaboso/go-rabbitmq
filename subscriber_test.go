@@ -23,7 +23,7 @@ func TestSubscribe(t *testing.T) {
 	nilErr(t, err, "connection failed")
 	defer conn.Close()
 
-	sub, err := rabbitmq.NewSubscriber(conn)
+	sub, err := rabbitmq.NewSubscriberCtx(ctx, conn)
 	nilErr(t, err, "failed to create subscriber")
 	defer sub.Close()
 
