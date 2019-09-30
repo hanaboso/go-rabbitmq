@@ -28,6 +28,7 @@ type Connection struct {
 	notifyConnClose chan *amqp.Error
 	reconnectDelay  time.Duration
 	done            chan bool
+	Config          amqp.Config
 }
 
 func Connect(dsn string, opts ...func(*Connection)) (*Connection, error) {
@@ -39,6 +40,10 @@ func ConnectCtx(ctx context.Context, dsn string, opts ...func(*Connection)) (*Co
 		logger:         logger{Logger: DeafLogger()},
 		done:           make(chan bool),
 		reconnectDelay: 5 * time.Second,
+		Config: amqp.Config{
+			Heartbeat: 10 * time.Second, // amqp.defaultHeartbeat
+			Locale:    "en_US",          // amqp.defaultLocale
+		},
 	}
 
 	for _, opt := range opts {
@@ -227,7 +232,7 @@ func (c *Connection) queueBind(binding Binding) error {
 
 func (c *Connection) handleReconnect(ctx context.Context, dsn string) error {
 	for {
-		conn, err := amqp.Dial(dsn)
+		conn, err := amqp.DialConfig(dsn, c.Config)
 		if err != nil {
 			var aErr *amqp.Error
 			if errors.As(err, &aErr) && aErr.Code == amqp.AccessRefused {
