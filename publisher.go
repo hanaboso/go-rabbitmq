@@ -3,6 +3,7 @@ package rabbitmq
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -28,18 +29,15 @@ type publisher struct {
 	logger          logger
 	done            chan bool
 	closeOnce       sync.Once
-	// TODO why two delays?
-	reconnectDelay time.Duration
-	resendDelay    time.Duration
+	reconnectDelay  time.Duration
 }
 
 func NewPublisher(conn *Connection, options ...func(*publisher)) (PublisherCtx, error) {
 	p := publisher{
 		connection:     conn,
-		resendDelay:    time.Second,
 		logger:         conn.logger,
 		done:           make(chan bool),
-		reconnectDelay: 5 * time.Second,
+		reconnectDelay: time.Second,
 	}
 	for _, option := range options {
 		option(&p)
@@ -116,11 +114,11 @@ func (p *publisher) changeChannel(channel *amqp.Channel) {
 	p.ch.NotifyPublish(p.notifyConfirm)
 }
 
-func (p *publisher) Publish(exchange, key string, data []byte, options ...func(*Publishing) /*TODO wrapper, maybe config struct*/) error {
+func (p *publisher) Publish(exchange, key string, data []byte, options ...func(*Publishing)) error {
 	return p.PublishCtx(context.Background(), exchange, key, data, options...)
 }
 
-func (p *publisher) PublishCtx(ctx context.Context, exchange, key string, data []byte, options ...func(*Publishing) /*TODO wrapper, maybe config struct*/) error {
+func (p *publisher) PublishCtx(ctx context.Context, exchange, key string, data []byte, options ...func(*Publishing)) error {
 	for {
 		if err := p.publish(exchange, key, data, options...); err != nil {
 			p.logger.Debugf("Push failed: %v", err)
@@ -133,8 +131,8 @@ func (p *publisher) PublishCtx(ctx context.Context, exchange, key string, data [
 				return ctx.Err()
 			case <-p.done:
 				p.logger.Debug("publisher is done")
-				return nil // TODO should be error. Publish wasn't successful!!!
-			case <-time.After(p.resendDelay):
+				return fmt.Errorf("publisher is done")
+			case <-time.After(p.reconnectDelay):
 			}
 			continue
 		}
@@ -144,13 +142,13 @@ func (p *publisher) PublishCtx(ctx context.Context, exchange, key string, data [
 				p.logger.Debug("Push confirmed!")
 				return nil
 			}
-		case <-time.After(p.resendDelay):
+		case <-time.After(p.reconnectDelay):
 		}
 		p.logger.Debug("Push didn't confirm. Retrying...")
 	}
 }
 
-func (p *publisher) publish(exchange, key string, data []byte, options ...func(*Publishing) /*TODO wrapper, maybe config struct*/) error {
+func (p *publisher) publish(exchange, key string, data []byte, options ...func(*Publishing)) error {
 	pub := Publishing{
 		ContentType: "text/plain",
 		Timestamp:   time.Now(),

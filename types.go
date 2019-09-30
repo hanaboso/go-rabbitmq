@@ -123,7 +123,35 @@ func SubscriptionWithConsumer(consumer string) func(*Subscription) {
 	}
 }
 
-// TODO define more options
+func SubscriptionWithAutoAck(autoAck bool) func(*Subscription) {
+	return func(subscription *Subscription) {
+		subscription.AutoAck = autoAck
+	}
+}
+
+func SubscriptionWithExclusive(exclusive bool) func(*Subscription) {
+	return func(subscription *Subscription) {
+		subscription.Exclusive = exclusive
+	}
+}
+
+func SubscriptionWithNoLocal(noLocal bool) func(*Subscription) {
+	return func(subscription *Subscription) {
+		subscription.NoLocal = noLocal
+	}
+}
+
+func SubscriptionWithNoWait(noWait bool) func(*Subscription) {
+	return func(subscription *Subscription) {
+		subscription.NoWait = noWait
+	}
+}
+
+func SubscriptionWithArguments(args Arguments) func(*Subscription) {
+	return func(subscription *Subscription) {
+		subscription.Args = args
+	}
+}
 
 type Exchange struct {
 	Name       string

@@ -19,6 +19,12 @@ func ConnectionWithLogger(log Logger, level LoggingLevel) func(*Connection) {
 	}
 }
 
+func ConnectionWithConfig(config amqp.Config) func(*Connection) {
+	return func(connection *Connection) {
+		connection.Config = config
+	}
+}
+
 // TODO define more options
 
 type Connection struct {
