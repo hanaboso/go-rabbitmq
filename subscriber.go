@@ -10,13 +10,13 @@ import (
 )
 
 type Subscriber interface {
-	Subscribe(queue string, opts ...func(*Subscription)) (<-chan Message, error)
+	Subscribe(queue string, options ...func(*Subscription)) (<-chan Message, error)
 	Close() error
 }
 
 type SubscriberCtx interface {
 	Subscriber
-	SubscribeCtx(ctx context.Context, queue string, opts ...func(*Subscription)) (<-chan Message, error)
+	SubscribeCtx(ctx context.Context, queue string, options ...func(*Subscription)) (<-chan Message, error)
 }
 
 type subscriber struct {
@@ -30,15 +30,15 @@ type subscriber struct {
 	reconnectDelay  time.Duration
 }
 
-func NewSubscriber(conn *Connection, opts ...func(*subscriber)) (SubscriberCtx, error) {
+func NewSubscriber(conn *Connection, options ...func(*subscriber)) (SubscriberCtx, error) {
 	s := subscriber{
 		connection:     conn,
 		logger:         conn.logger,
 		done:           make(chan bool),
 		reconnectDelay: 5 * time.Second,
 	}
-	for _, opt := range opts {
-		opt(&s)
+	for _, option := range options {
+		option(&s)
 	}
 
 	s.handleReconnect()
@@ -105,16 +105,16 @@ func (s *subscriber) changeChannel(channel *amqp.Channel) {
 	s.ch.NotifyClose(s.notifyChanClose)
 }
 
-func (s *subscriber) Subscribe(queue string, opts ...func(*Subscription)) (<-chan Message, error) {
-	return s.SubscribeCtx(context.Background(), queue, opts...)
+func (s *subscriber) Subscribe(queue string, options ...func(*Subscription)) (<-chan Message, error) {
+	return s.SubscribeCtx(context.Background(), queue, options...)
 }
 
-func (s *subscriber) SubscribeCtx(ctx context.Context, queue string, opts ...func(*Subscription)) (<-chan Message, error) {
+func (s *subscriber) SubscribeCtx(ctx context.Context, queue string, options ...func(*Subscription)) (<-chan Message, error) {
 	conf := Subscription{
 		Queue: queue,
 	}
-	for _, opt := range opts {
-		opt(&conf)
+	for _, option := range options {
+		option(&conf)
 	}
 
 	ch := make(chan Message)

@@ -13,7 +13,7 @@ import (
 func ExamplePublish() {
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
 	conn, err := rabbitmq.Connect(dataSourceName,
-		rabbitmq.WithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
+		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
 	)
 	if err != nil {
 		fmt.Printf("connection failed: %v", err)
@@ -39,7 +39,7 @@ func ExamplePublish() {
 	}
 
 	if err := pub.Publish("", "my.routing.key", buff.Bytes(),
-		rabbitmq.SetPublishingDeliveryMode(rabbitmq.Persistent),
+		rabbitmq.PublishingWithDeliveryMode(rabbitmq.Persistent),
 	); err != nil {
 		fmt.Printf("failed to publish: %v", err)
 		return
@@ -49,7 +49,7 @@ func ExamplePublish() {
 func ExampleSubscribe() {
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
 	conn, err := rabbitmq.Connect(dataSourceName,
-		rabbitmq.SetLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
+		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
 	)
 	if err != nil {
 		fmt.Printf("connection failed: %v", err)
@@ -64,7 +64,7 @@ func ExampleSubscribe() {
 	}
 	defer sub.Close()
 
-	q, err := conn.QueueDeclare("my.routing.key", rabbitmq.SetQueueDurability(true))
+	q, err := conn.QueueDeclare("my.routing.key", rabbitmq.QueueWithDurability(true))
 	if err != nil {
 		fmt.Printf("failed to declare queue: %v", err)
 		return

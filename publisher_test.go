@@ -25,7 +25,7 @@ func TestPublish(t *testing.T) {
 
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
 	conn, err := rabbitmq.ConnectCtx(ctx, dataSourceName,
-		rabbitmq.WithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
+		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
 	)
 	nilErr(t, err, "failed to connect")
 	defer conn.Close()
@@ -34,7 +34,7 @@ func TestPublish(t *testing.T) {
 		exchangeName = "my awesome exchange"
 		routingKey   = "routing.key.one"
 	)
-	nilErr(t, conn.ExchangeDeclare(exchangeName, rabbitmq.ExchangeTopic, rabbitmq.SetExchangeDurability(true)), "exchange declaration failed")
+	nilErr(t, conn.ExchangeDeclare(exchangeName, rabbitmq.ExchangeTopic, rabbitmq.ExchangeWithDurable(true)), "exchange declaration failed")
 
 	pub, err := rabbitmq.NewPublisher(conn)
 	nilErr(t, err)
@@ -48,8 +48,8 @@ func TestPublish(t *testing.T) {
 	nilErr(t, json.NewEncoder(&buff).Encode(msg))
 
 	nilErr(t, pub.PublishCtx(ctx, exchangeName, routingKey, buff.Bytes(),
-		rabbitmq.SetPublishingDeliveryMode(rabbitmq.Persistent),
-		rabbitmq.SetPublishingContentType("application/json"),
+		rabbitmq.PublishingWithDeliveryMode(rabbitmq.Persistent),
+		rabbitmq.PublishingWithContentType("application/json"),
 		func(p *rabbitmq.Publishing) {
 			p.ContentEncoding = "utf-8"
 		},

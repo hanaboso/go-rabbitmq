@@ -17,9 +17,17 @@ const (
 )
 
 type (
-	ArgumentsTable amqp.Table
-	Headers        amqp.Table
+	Arguments amqp.Table
+	Headers   amqp.Table
 )
+
+func (a Arguments) Validate() error {
+	return amqp.Table(a).Validate()
+}
+
+func (h Headers) Validate() error {
+	return amqp.Table(h).Validate()
+}
 
 type Message struct {
 	amqp.Delivery
@@ -85,13 +93,13 @@ type Publishing struct {
 	AppId           string
 }
 
-func SetPublishingDeliveryMode(mode DeliveryMode) func(*Publishing) {
+func PublishingWithDeliveryMode(mode DeliveryMode) func(*Publishing) {
 	return func(p *Publishing) {
 		p.DeliveryMode = mode
 	}
 }
 
-func SetPublishingContentType(contentType string) func(*Publishing) {
+func PublishingWithContentType(contentType string) func(*Publishing) {
 	return func(p *Publishing) {
 		p.ContentType = contentType
 	}
@@ -106,10 +114,10 @@ type Subscription struct {
 	Exclusive bool
 	NoLocal   bool
 	NoWait    bool
-	Args      ArgumentsTable
+	Args      Arguments
 }
 
-func SetSubscriptionConsumer(consumer string) func(*Subscription) {
+func SubscriptionWithConsumer(consumer string) func(*Subscription) {
 	return func(subscription *Subscription) {
 		subscription.Consumer = consumer
 	}
@@ -124,16 +132,38 @@ type Exchange struct {
 	AutoDelete bool
 	Internal   bool
 	NoWait     bool
-	Args       ArgumentsTable
+	Args       Arguments
 }
 
-func SetExchangeDurability(durable bool) func(*Exchange) {
-	return func(ex *Exchange) {
-		ex.Durable = durable
+func ExchangeWithDurable(durable bool) func(*Exchange) {
+	return func(exchange *Exchange) {
+		exchange.Durable = durable
 	}
 }
 
-// TODO define more options
+func ExchangeWithAutoDelete(autoDelete bool) func(*Exchange) {
+	return func(exchange *Exchange) {
+		exchange.AutoDelete = autoDelete
+	}
+}
+
+func ExchangeWithInternal(internal bool) func(*Exchange) {
+	return func(exchange *Exchange) {
+		exchange.Internal = internal
+	}
+}
+
+func ExchangeWithNoWait(noWait bool) func(*Exchange) {
+	return func(exchange *Exchange) {
+		exchange.NoWait = noWait
+	}
+}
+
+func ExchangeWithArguments(args Arguments) func(*Exchange) {
+	return func(exchange *Exchange) {
+		exchange.Args = args
+	}
+}
 
 type Queue struct {
 	Name       string
@@ -141,29 +171,55 @@ type Queue struct {
 	AutoDelete bool
 	Exclusive  bool
 	NoWait     bool
-	Args       ArgumentsTable
+	Args       Arguments
 }
 
-func SetQueueDurability(durable bool) func(*Queue) {
-	return func(config *Queue) {
-		config.Durable = durable
+func QueueWithDurability(durable bool) func(*Queue) {
+	return func(queue *Queue) {
+		queue.Durable = durable
 	}
 }
 
-func SetQueueAutoDelete(autoDelete bool) func(*Queue) {
-	return func(config *Queue) {
-		config.AutoDelete = autoDelete
+func QueueWithAutoDelete(autoDelete bool) func(*Queue) {
+	return func(queue *Queue) {
+		queue.AutoDelete = autoDelete
 	}
 }
 
-// TODO define more options
+func QueueWithExclusive(exclusive bool) func(*Queue) {
+	return func(queue *Queue) {
+		queue.Exclusive = exclusive
+	}
+}
+
+func QueueWithNoWait(noWait bool) func(*Queue) {
+	return func(queue *Queue) {
+		queue.NoWait = noWait
+	}
+}
+
+func QueueWithArguments(args Arguments) func(*Queue) {
+	return func(queue *Queue) {
+		queue.Args = args
+	}
+}
 
 type Binding struct {
 	Name       string
 	RoutingKey string
 	Exchange   string
 	NoWait     bool
-	Args       ArgumentsTable
+	Args       Arguments
 }
 
-// TODO define options
+func BindingWithNoWait(noWait bool) func(*Binding) {
+	return func(binding *Binding) {
+		binding.NoWait = noWait
+	}
+}
+
+func BindingWithArguments(args Arguments) func(*Binding) {
+	return func(binding *Binding) {
+		binding.Args = args
+	}
+}

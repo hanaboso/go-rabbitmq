@@ -10,7 +10,7 @@ import (
 	"github.com/streadway/amqp"
 )
 
-func WithLogger(log Logger, level LoggingLevel) func(*Connection) {
+func ConnectionWithLogger(log Logger, level LoggingLevel) func(*Connection) {
 	return func(connection *Connection) {
 		connection.logger = logger{
 			Logger: log,
@@ -32,11 +32,11 @@ type Connection struct {
 	Config          amqp.Config
 }
 
-func Connect(dsn string, opts ...func(*Connection)) (*Connection, error) {
-	return ConnectCtx(context.Background(), dsn, opts...)
+func Connect(dsn string, options ...func(*Connection)) (*Connection, error) {
+	return ConnectCtx(context.Background(), dsn, options...)
 }
 
-func ConnectCtx(ctx context.Context, dsn string, opts ...func(*Connection)) (*Connection, error) {
+func ConnectCtx(ctx context.Context, dsn string, options ...func(*Connection)) (*Connection, error) {
 	conn := Connection{
 		logger:         logger{Logger: DeafLogger()},
 		done:           make(chan bool),
@@ -47,8 +47,8 @@ func ConnectCtx(ctx context.Context, dsn string, opts ...func(*Connection)) (*Co
 		},
 	}
 
-	for _, opt := range opts {
-		opt(&conn)
+	for _, option := range options {
+		option(&conn)
 	}
 
 	if err := conn.handleReconnect(ctx, dsn); err != nil {
@@ -89,17 +89,17 @@ func (c *Connection) Close() error {
 	return c.conn.Close()
 }
 
-func (c *Connection) ExchangeDeclare(name string, kind ExchangeType, opts ...func(*Exchange)) error {
-	return c.ExchangeDeclareCtx(context.Background(), name, kind, opts...)
+func (c *Connection) ExchangeDeclare(name string, kind ExchangeType, options ...func(*Exchange)) error {
+	return c.ExchangeDeclareCtx(context.Background(), name, kind, options...)
 }
 
-func (c *Connection) ExchangeDeclareCtx(ctx context.Context, name string, kind ExchangeType, opts ...func(*Exchange)) error {
+func (c *Connection) ExchangeDeclareCtx(ctx context.Context, name string, kind ExchangeType, options ...func(*Exchange)) error {
 	exchange := Exchange{
 		Name: name,
 		Type: kind,
 	}
-	for _, opt := range opts {
-		opt(&exchange)
+	for _, option := range options {
+		option(&exchange)
 	}
 
 	for {
@@ -134,16 +134,16 @@ func (c *Connection) exchangeDeclare(exchange Exchange) error {
 	)
 }
 
-func (c *Connection) QueueDeclare(name string, opts ...func(*Queue)) (Queue, error) {
-	return c.QueueDeclareCtx(context.Background(), name, opts...)
+func (c *Connection) QueueDeclare(name string, options ...func(*Queue)) (Queue, error) {
+	return c.QueueDeclareCtx(context.Background(), name, options...)
 }
 
-func (c *Connection) QueueDeclareCtx(ctx context.Context, name string, opts ...func(*Queue)) (Queue, error) {
+func (c *Connection) QueueDeclareCtx(ctx context.Context, name string, options ...func(*Queue)) (Queue, error) {
 	queue := Queue{
 		Name: name,
 	}
-	for _, opt := range opts {
-		opt(&queue)
+	for _, option := range options {
+		option(&queue)
 	}
 
 	for {
@@ -185,19 +185,19 @@ func (c *Connection) queueDeclare(queue Queue) (Queue, error) {
 	return queue, nil
 }
 
-func (c *Connection) QueueBind(name, key, exchange string, opts ...func(*Binding)) error {
-	return c.QueueBindCtx(context.Background(), name, key, exchange, opts...)
+func (c *Connection) QueueBind(name, key, exchange string, options ...func(*Binding)) error {
+	return c.QueueBindCtx(context.Background(), name, key, exchange, options...)
 }
 
-func (c *Connection) QueueBindCtx(ctx context.Context, name, key, exchange string, opts ...func(*Binding)) error {
+func (c *Connection) QueueBindCtx(ctx context.Context, name, key, exchange string, options ...func(*Binding)) error {
 	binding := Binding{
 		Name:       name,
 		RoutingKey: key,
 		Exchange:   exchange,
 	}
 
-	for _, opt := range opts {
-		opt(&binding)
+	for _, option := range options {
+		option(&binding)
 	}
 
 	for {

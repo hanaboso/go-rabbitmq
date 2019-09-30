@@ -18,7 +18,7 @@ func TestSubscribe(t *testing.T) {
 
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
 	conn, err := rabbitmq.ConnectCtx(ctx, dataSourceName,
-		rabbitmq.WithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
+		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
 	)
 	nilErr(t, err, "connection failed")
 	defer conn.Close()
@@ -32,12 +32,12 @@ func TestSubscribe(t *testing.T) {
 		exchangeName = "my awesome exchange"
 		routingKey   = "routing.key.one"
 	)
-	q, err := conn.QueueDeclareCtx(ctx, queueName, rabbitmq.SetQueueAutoDelete(true))
+	q, err := conn.QueueDeclareCtx(ctx, queueName, rabbitmq.QueueWithAutoDelete(true))
 	nilErr(t, err, "queue declaration failed")
-	nilErr(t, conn.ExchangeDeclareCtx(ctx, exchangeName, rabbitmq.ExchangeTopic, rabbitmq.SetExchangeDurability(true)), "exchange declaration failed")
+	nilErr(t, conn.ExchangeDeclareCtx(ctx, exchangeName, rabbitmq.ExchangeTopic, rabbitmq.ExchangeWithDurable(true)), "exchange declaration failed")
 	nilErr(t, conn.QueueBindCtx(ctx, q.Name, routingKey, exchangeName), "queue bind failed")
 
-	msgs, err := sub.SubscribeCtx(ctx, q.Name, rabbitmq.SetSubscriptionConsumer("Hello, i'm Mr. Meeseek, look at me!"))
+	msgs, err := sub.SubscribeCtx(ctx, q.Name, rabbitmq.SubscriptionWithConsumer("Hello, i'm Mr. Meeseek, look at me!"))
 	nilErr(t, err, "subscription failed")
 	for msg := range msgs {
 		var s struct {
