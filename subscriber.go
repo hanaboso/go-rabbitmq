@@ -26,6 +26,7 @@ type subscriber struct {
 	notifyChanClose chan *amqp.Error
 	logger          logger
 	done            chan bool
+	closeOnce       sync.Once
 	reconnectDelay  time.Duration
 }
 
@@ -171,7 +172,9 @@ func (s *subscriber) consume(ctx context.Context, src <-chan amqp.Delivery, dst 
 }
 
 func (s *subscriber) Close() error {
-	// TODO can't be closed twice
-	close(s.done)
+	s.closeOnce.Do(func() {
+		close(s.done)
+	})
+
 	return s.ch.Close()
 }

@@ -27,6 +27,7 @@ type publisher struct {
 	notifyConfirm   chan amqp.Confirmation
 	logger          logger
 	done            chan bool
+	closeOnce       sync.Once
 	// TODO why two delays?
 	reconnectDelay time.Duration
 	resendDelay    time.Duration
@@ -186,7 +187,9 @@ func (p *publisher) publish(exchange, key string, data []byte, opts ...func(*Pub
 }
 
 func (p *publisher) Close() error {
-	// TODO can't be closed twice
-	close(p.done)
+	p.closeOnce.Do(func() {
+		close(p.done)
+	})
+
 	return p.ch.Close()
 }

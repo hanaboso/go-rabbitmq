@@ -28,6 +28,7 @@ type Connection struct {
 	notifyConnClose chan *amqp.Error
 	reconnectDelay  time.Duration
 	done            chan bool
+	closeOnce       sync.Once
 	Config          amqp.Config
 }
 
@@ -75,8 +76,9 @@ func ConnectCtx(ctx context.Context, dsn string, opts ...func(*Connection)) (*Co
 }
 
 func (c *Connection) Close() error {
-	// TODO can't be closed twice
-	close(c.done)
+	c.closeOnce.Do(func() {
+		close(c.done)
+	})
 
 	c.connM.Lock()
 	defer c.connM.Unlock()
@@ -182,8 +184,6 @@ func (c *Connection) queueDeclare(queue Queue) (Queue, error) {
 	queue.Name = q.Name
 	return queue, nil
 }
-
-// TODO add config for `noWait` and `args`
 
 func (c *Connection) QueueBind(name, key, exchange string, opts ...func(*Binding)) error {
 	return c.QueueBindCtx(context.Background(), name, key, exchange, opts...)
