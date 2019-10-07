@@ -118,14 +118,27 @@ func (c *Connection) ExchangeDeclareCtx(ctx context.Context, name string, kind E
 	}
 
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(c.reconnectDelay):
-			if err := c.exchangeDeclare(exchange); err != nil {
-				c.logger.Debug(err)
-				continue
+		if err := c.exchangeDeclare(exchange); err != nil {
+			var aErr *amqp.Error
+			if errors.As(err, &aErr) {
+				switch aErr.Code {
+				case amqp.AccessRefused:
+					return err
+				case amqp.PreconditionFailed:
+					return err
+				}
 			}
+
+			c.logger.Info(err)
+
+			select {
+			case <-c.done:
+				return errors.New("connection is done")
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(c.reconnectDelay):
+			}
+			continue
 		}
 		return nil
 	}
@@ -164,19 +177,30 @@ func (c *Connection) QueueDeclareCtx(ctx context.Context, name string, options .
 	}
 
 	for {
-		select {
-		case <-c.done:
-			return Queue{}, fmt.Errorf("")
-		case <-ctx.Done():
-			return Queue{}, ctx.Err()
-		case <-time.After(c.reconnectDelay):
-			q, err := c.queueDeclare(queue)
-			if err != nil {
-				c.logger.Debug(err)
-				continue
+		q, err := c.queueDeclare(queue)
+		if err != nil {
+			var aErr *amqp.Error
+			if errors.As(err, &aErr) {
+				switch aErr.Code {
+				case amqp.AccessRefused:
+					return Queue{}, err
+				case amqp.PreconditionFailed:
+					return Queue{}, err
+				}
 			}
-			return q, nil
+
+			c.logger.Info(err)
+
+			select {
+			case <-c.done:
+				return Queue{}, errors.New("connection is done")
+			case <-ctx.Done():
+				return Queue{}, ctx.Err()
+			case <-time.After(c.reconnectDelay):
+			}
+			continue
 		}
+		return q, nil
 	}
 }
 
@@ -220,14 +244,27 @@ func (c *Connection) QueueBindCtx(ctx context.Context, name, key, exchange strin
 	}
 
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(c.reconnectDelay):
-			if err := c.queueBind(binding); err != nil {
-				c.logger.Debug(err)
-				continue
+		if err := c.queueBind(binding); err != nil {
+			var aErr *amqp.Error
+			if errors.As(err, &aErr) {
+				switch aErr.Code {
+				case amqp.AccessRefused:
+					return err
+				case amqp.PreconditionFailed:
+					return err
+				}
 			}
+
+			c.logger.Debug(err)
+
+			select {
+			case <-c.done:
+				return errors.New("connection is done")
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(c.reconnectDelay):
+			}
+			continue
 		}
 		return nil
 	}
