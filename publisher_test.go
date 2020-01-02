@@ -14,6 +14,7 @@ import (
 )
 
 func nilErr(t *testing.T, err error, args ...interface{}) {
+	t.Helper()
 	if err != nil {
 		t.Fatalf("%s: %v", fmt.Sprint(args...), err)
 	}
