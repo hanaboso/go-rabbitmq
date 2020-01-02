@@ -12,14 +12,8 @@ import (
 
 // Subscriber is interface that provides all necessary methods for subscribing.
 type Subscriber interface {
-	Subscribe(queue string, options ...func(*Subscription)) (<-chan Message, error)
+	Subscribe(ctx context.Context, queue *Queue, options ...func(*Subscription)) (<-chan Message, error)
 	Close() error
-}
-
-// SubscriberCtx is interface that provides all necessary methods for subscribing with context.
-type SubscriberCtx interface {
-	Subscriber
-	SubscribeCtx(ctx context.Context, queue string, options ...func(*Subscription)) (<-chan Message, error)
 }
 
 type subscriber struct {
@@ -33,14 +27,9 @@ type subscriber struct {
 	reconnectDelay  time.Duration
 }
 
-// NewSubscriber creates Subscriber that uses provided connection
-func NewSubscriber(conn *Connection, options ...func(*subscriber)) (Subscriber, error) {
-	return NewSubscriberCtx(context.Background(), conn, options...)
-}
-
-// NewSubscriberCtx creates SubscriberCtx that uses provided connection.
+// NewSubscriber creates Subscriber that uses provided connection.
 // Subscriber reconnect doesn't rely on context.
-func NewSubscriberCtx(ctx context.Context, conn *Connection, options ...func(*subscriber)) (SubscriberCtx, error) {
+func NewSubscriber(ctx context.Context, conn *Connection, options ...func(*subscriber)) (Subscriber, error) {
 	s := subscriber{
 		connection:     conn,
 		logger:         conn.logger,
@@ -122,17 +111,15 @@ func (s *subscriber) changeChannel(channel *amqp.Channel) {
 	s.ch.NotifyClose(s.notifyChanClose)
 }
 
-func (s *subscriber) Subscribe(queue string, options ...func(*Subscription)) (<-chan Message, error) {
-	return s.SubscribeCtx(context.Background(), queue, options...)
-}
-
-func (s *subscriber) SubscribeCtx(ctx context.Context, queue string, options ...func(*Subscription)) (<-chan Message, error) {
+func (s *subscriber) Subscribe(ctx context.Context, queue *Queue, options ...func(*Subscription)) (<-chan Message, error) {
 	subscription := Subscription{
-		Queue: queue,
+		Queue: queue.Name,
 	}
 	for _, option := range options {
 		option(&subscription)
 	}
+
+	// TODO use *Queue to recover queue definition + binding
 
 	ch := make(chan Message)
 	go func() {

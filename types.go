@@ -111,10 +111,24 @@ type Publishing struct {
 	AppID           string
 }
 
-// PublishingWithDeliveryMode provides publishing with deliveryMode.
-func PublishingWithDeliveryMode(deliveryMode DeliveryMode) func(*Publishing) {
+// PublishingWithMandatory provides publishing with mandatory.
+func PublishingWithMandatory(mandatory bool) func(*Publishing) {
 	return func(publishing *Publishing) {
-		publishing.DeliveryMode = deliveryMode
+		publishing.Mandatory = mandatory
+	}
+}
+
+// PublishingWithImmediate provides publishing with immediate.
+func PublishingWithImmediate(immediate bool) func(*Publishing) {
+	return func(publishing *Publishing) {
+		publishing.Immediate = immediate
+	}
+}
+
+// PublishingWithHeaders provides publishing with headers.
+func PublishingWithHeaders(headers Headers) func(*Publishing) {
+	return func(publishing *Publishing) {
+		publishing.Headers = headers
 	}
 }
 
@@ -122,6 +136,20 @@ func PublishingWithDeliveryMode(deliveryMode DeliveryMode) func(*Publishing) {
 func PublishingWithContentType(contentType string) func(*Publishing) {
 	return func(publishing *Publishing) {
 		publishing.ContentType = contentType
+	}
+}
+
+// PublishingWithContentEncoding provides publishing with contentEncoding.
+func PublishingWithContentEncoding(contentEncoding string) func(*Publishing) {
+	return func(publishing *Publishing) {
+		publishing.ContentEncoding = contentEncoding
+	}
+}
+
+// PublishingWithDeliveryMode provides publishing with deliveryMode.
+func PublishingWithDeliveryMode(deliveryMode DeliveryMode) func(*Publishing) {
+	return func(publishing *Publishing) {
+		publishing.DeliveryMode = deliveryMode
 	}
 }
 
@@ -234,6 +262,8 @@ type Queue struct {
 	Exclusive  bool
 	NoWait     bool
 	Args       Arguments
+
+	bindings []Binding
 }
 
 // QueueWithDurability provides queue with durable.

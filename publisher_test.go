@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Hanaboso/rabbitmq"
+	"github.com/hanaboso-go/rabbitmq"
 )
 
 func nilErr(t *testing.T, err error, args ...interface{}) {
@@ -23,8 +23,8 @@ func TestPublish(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	const dataSourceName = "amqp://guest:guest@localhost:5672/"
-	conn, err := rabbitmq.ConnectCtx(ctx, dataSourceName,
+	dataSourceName := DSNForTest(t)
+	conn, err := rabbitmq.Connect(ctx, dataSourceName,
 		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
 	)
 	nilErr(t, err, "failed to connect")
@@ -34,9 +34,9 @@ func TestPublish(t *testing.T) {
 		exchangeName = "my awesome exchange"
 		routingKey   = "routing.key.one"
 	)
-	nilErr(t, conn.ExchangeDeclare(exchangeName, rabbitmq.ExchangeTopic, rabbitmq.ExchangeWithDurable(true)), "exchange declaration failed")
+	nilErr(t, conn.ExchangeDeclare(ctx, exchangeName, rabbitmq.ExchangeTopic, rabbitmq.ExchangeWithDurable(true)), "exchange declaration failed")
 
-	pub, err := rabbitmq.NewPublisherCtx(ctx, conn)
+	pub, err := rabbitmq.NewPublisher(ctx, conn)
 	nilErr(t, err)
 	defer pub.Close()
 
@@ -47,7 +47,7 @@ func TestPublish(t *testing.T) {
 	var buff bytes.Buffer
 	nilErr(t, json.NewEncoder(&buff).Encode(msg))
 
-	nilErr(t, pub.PublishCtx(ctx, exchangeName, routingKey, buff.Bytes(),
+	nilErr(t, pub.Publish(ctx, exchangeName, routingKey, buff.Bytes(),
 		rabbitmq.PublishingWithDeliveryMode(rabbitmq.Persistent),
 		rabbitmq.PublishingWithContentType("application/json"),
 		func(p *rabbitmq.Publishing) {

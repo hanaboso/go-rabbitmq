@@ -41,14 +41,9 @@ type Connection struct {
 	Config          amqp.Config
 }
 
-// Connect connects to provided DSN and  returns Connection with started reconnect goroutine.
-func Connect(dsn string, options ...func(*Connection)) (*Connection, error) {
-	return ConnectCtx(context.Background(), dsn, options...)
-}
-
-// ConnectCtx connects to provided DSN with context and returns Connection with started reconnect goroutine.
+// Connect connects to provided DSN with context and returns Connection with started reconnect goroutine.
 // Connection reconnect doesn't rely on context.
-func ConnectCtx(ctx context.Context, dsn string, options ...func(*Connection)) (*Connection, error) {
+func Connect(ctx context.Context, dsn string, options ...func(*Connection)) (*Connection, error) {
 	conn := Connection{
 		logger:         logger{Logger: DeafLogger()},
 		done:           make(chan bool),
@@ -102,13 +97,8 @@ func (c *Connection) Close() error {
 	return c.conn.Close()
 }
 
-// ExchangeDeclare declares exchange
-func (c *Connection) ExchangeDeclare(name string, kind ExchangeType, options ...func(*Exchange)) error {
-	return c.ExchangeDeclareCtx(context.Background(), name, kind, options...)
-}
-
-// ExchangeDeclareCtx declares exchange with context
-func (c *Connection) ExchangeDeclareCtx(ctx context.Context, name string, kind ExchangeType, options ...func(*Exchange)) error {
+// ExchangeDeclare declares exchange with context
+func (c *Connection) ExchangeDeclare(ctx context.Context, name string, kind ExchangeType, options ...func(*Exchange)) error {
 	exchange := Exchange{
 		Name: name,
 		Type: kind,
@@ -162,13 +152,8 @@ func (c *Connection) exchangeDeclare(exchange Exchange) error {
 	)
 }
 
-// QueueDeclare declares queue
-func (c *Connection) QueueDeclare(name string, options ...func(*Queue)) (Queue, error) {
-	return c.QueueDeclareCtx(context.Background(), name, options...)
-}
-
-// QueueDeclareCtx declares queue with context
-func (c *Connection) QueueDeclareCtx(ctx context.Context, name string, options ...func(*Queue)) (Queue, error) {
+// QueueDeclare declares queue with context
+func (c *Connection) QueueDeclare(ctx context.Context, name string, options ...func(*Queue)) (Queue, error) {
 	queue := Queue{
 		Name: name,
 	}
@@ -226,15 +211,14 @@ func (c *Connection) queueDeclare(queue Queue) (Queue, error) {
 	return queue, nil
 }
 
-// QueueBind binds queue on exchange with provided routing key.
-func (c *Connection) QueueBind(name, key, exchange string, options ...func(*Binding)) error {
-	return c.QueueBindCtx(context.Background(), name, key, exchange, options...)
-}
+// QueueBind binds queue on exchange with provided routing key with context.
+func (c *Connection) QueueBind(ctx context.Context, queue *Queue, key, exchange string, options ...func(*Binding)) error {
+	if queue == nil {
+		return errors.New("queue can't be nil")
+	}
 
-// QueueBindCtx binds queue on exchange with provided routing key with context.
-func (c *Connection) QueueBindCtx(ctx context.Context, name, key, exchange string, options ...func(*Binding)) error {
 	binding := Binding{
-		Name:       name,
+		Name:       queue.Name,
 		RoutingKey: key,
 		Exchange:   exchange,
 	}
@@ -266,8 +250,11 @@ func (c *Connection) QueueBindCtx(ctx context.Context, name, key, exchange strin
 			}
 			continue
 		}
-		return nil
+		break
 	}
+
+	queue.bindings = append(queue.bindings, binding)
+	return nil
 }
 
 func (c *Connection) queueBind(binding Binding) error {

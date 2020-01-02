@@ -2,17 +2,21 @@ package rabbitmq_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 
-	"github.com/Hanaboso/rabbitmq"
+	"github.com/hanaboso-go/rabbitmq"
 )
 
 func ExamplePublisher_Publish() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
-	conn, err := rabbitmq.Connect(dataSourceName,
+	conn, err := rabbitmq.Connect(ctx, dataSourceName,
 		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
 	)
 	if err != nil {
@@ -21,7 +25,7 @@ func ExamplePublisher_Publish() {
 	}
 	defer conn.Close()
 
-	pub, err := rabbitmq.NewPublisher(conn)
+	pub, err := rabbitmq.NewPublisher(ctx, conn)
 	if err != nil {
 		fmt.Printf("failed to create publisher: %v", err)
 		return
@@ -38,7 +42,7 @@ func ExamplePublisher_Publish() {
 		return
 	}
 
-	if err := pub.Publish("", "my.routing.key", buff.Bytes(),
+	if err := pub.Publish(ctx, "", "my.routing.key", buff.Bytes(),
 		rabbitmq.PublishingWithDeliveryMode(rabbitmq.Persistent),
 	); err != nil {
 		fmt.Printf("failed to publish: %v", err)
@@ -47,8 +51,11 @@ func ExamplePublisher_Publish() {
 }
 
 func ExampleSubscriber_Subscribe() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
-	conn, err := rabbitmq.Connect(dataSourceName,
+	conn, err := rabbitmq.Connect(ctx, dataSourceName,
 		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
 	)
 	if err != nil {
@@ -57,20 +64,20 @@ func ExampleSubscriber_Subscribe() {
 	}
 	defer conn.Close()
 
-	sub, err := rabbitmq.NewSubscriber(conn)
+	sub, err := rabbitmq.NewSubscriber(ctx, conn)
 	if err != nil {
 		fmt.Printf("failed to create subscriber: %v", err)
 		return
 	}
 	defer sub.Close()
 
-	q, err := conn.QueueDeclare("my.routing.key", rabbitmq.QueueWithDurability(true))
+	q, err := conn.QueueDeclare(ctx, "my.routing.key", rabbitmq.QueueWithDurability(true))
 	if err != nil {
 		fmt.Printf("failed to declare queue: %v", err)
 		return
 	}
 
-	msgs, err := sub.Subscribe(q.Name)
+	msgs, err := sub.Subscribe(ctx, &q)
 	if err != nil {
 		fmt.Printf("failed to init subscribe: %v", err)
 		return

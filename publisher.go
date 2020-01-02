@@ -12,14 +12,8 @@ import (
 
 // Publisher is interface that provides all necessary methods for publishing.
 type Publisher interface {
-	Publish(exchange, key string, data []byte, options ...func(*Publishing)) error
+	Publish(ctx context.Context, exchange, key string, data []byte, options ...func(*Publishing)) error
 	Close() error
-}
-
-// PublisherCtx is interface that provides all necessary methods for publishing with context.
-type PublisherCtx interface {
-	Publisher
-	PublishCtx(ctx context.Context, exchange, key string, data []byte, options ...func(*Publishing)) error
 }
 
 type publisher struct {
@@ -34,14 +28,9 @@ type publisher struct {
 	reconnectDelay  time.Duration
 }
 
-// NewPublisher creates Publisher that uses provided connection
-func NewPublisher(conn *Connection, options ...func(*publisher)) (Publisher, error) {
-	return NewPublisherCtx(context.Background(), conn, options...)
-}
-
-// NewPublisherCtx creates PublisherCtx that uses provided connection.
+// NewPublisher creates Publisher that uses provided connection.
 // Publisher reconnect doesn't rely on context.
-func NewPublisherCtx(ctx context.Context, conn *Connection, options ...func(*publisher)) (PublisherCtx, error) {
+func NewPublisher(ctx context.Context, conn *Connection, options ...func(*publisher)) (Publisher, error) {
 	p := publisher{
 		connection:     conn,
 		logger:         conn.logger,
@@ -130,11 +119,7 @@ func (p *publisher) changeChannel(channel *amqp.Channel) {
 	p.ch.NotifyPublish(p.notifyConfirm)
 }
 
-func (p *publisher) Publish(exchange, key string, data []byte, options ...func(*Publishing)) error {
-	return p.PublishCtx(context.Background(), exchange, key, data, options...)
-}
-
-func (p *publisher) PublishCtx(ctx context.Context, exchange, key string, data []byte, options ...func(*Publishing)) error {
+func (p *publisher) Publish(ctx context.Context, exchange, key string, data []byte, options ...func(*Publishing)) error {
 	for {
 		if err := p.publish(exchange, key, data, options...); err != nil {
 			p.logger.Debugf("Push failed: %v", err)
@@ -167,7 +152,7 @@ func (p *publisher) PublishCtx(ctx context.Context, exchange, key string, data [
 func (p *publisher) publish(exchange, key string, data []byte, options ...func(*Publishing)) error {
 	pub := Publishing{
 		ContentType: "text/plain",
-		Timestamp:   time.Now(),
+		Timestamp:   time.Now().UTC(),
 		Exchange:    exchange,
 		RoutingKey:  key,
 		Body:        data,
