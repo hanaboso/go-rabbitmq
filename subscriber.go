@@ -10,6 +10,25 @@ import (
 	"github.com/streadway/amqp"
 )
 
+// SubscriberWithLogger overrides Logger taken from Connection.
+func SubscriberWithLogger(log Logger, level LoggingLevel) func(*subscriber) {
+	return func(s *subscriber) {
+		s.logger = logger{
+			Logger: log,
+			level:  level,
+		}
+	}
+}
+
+// SubscriberWithPrefetchLimit sets prefetch limit for subscriber.
+// Can't override global limit, stricter limit is applied.
+// Limit is set to channel in fact, but that channel will be used for this subscriber only.
+func SubscriberWithPrefetchLimit(count int) func(*subscriber) {
+	return func(s *subscriber) {
+		s.prefetchCount = count
+	}
+}
+
 // Subscriber is interface that provides all necessary methods for subscribing.
 type Subscriber interface {
 	Subscribe(ctx context.Context, queue *Queue, options ...func(*Subscription)) (<-chan Message, error)
@@ -25,6 +44,7 @@ type subscriber struct {
 	done            chan bool
 	closeOnce       sync.Once
 	reconnectDelay  time.Duration
+	prefetchCount   int
 }
 
 // NewSubscriber creates Subscriber that uses provided connection.
@@ -36,6 +56,7 @@ func NewSubscriber(ctx context.Context, conn *Connection, options ...func(*subsc
 		done:           make(chan bool),
 		reconnectDelay: 5 * time.Second,
 	}
+
 	for _, option := range options {
 		option(&s)
 	}
@@ -47,12 +68,12 @@ func NewSubscriber(ctx context.Context, conn *Connection, options ...func(*subsc
 		for {
 			select {
 			case <-conn.done:
-				s.logger.Debug("connection is done, closing publisher")
+				s.logger.Debug("connection is done, closing subscriber")
 				if err := s.Close(); err != nil {
 					s.logger.Debugf("failed to close subscriber: %v", err)
 				}
 			case <-s.done:
-				s.logger.Debug("publisher is done")
+				s.logger.Debug("subscriber is done")
 				return
 			case err := <-s.notifyChanClose:
 				if err == nil {
@@ -91,9 +112,27 @@ func (s *subscriber) handleReconnect(ctx context.Context) error {
 			continue
 		}
 
+		if err := s.presetChannel(ch); err != nil {
+			s.logger.Debugf("failed to preset channel: %v", err)
+			if err := ch.Close(); err != nil {
+				s.logger.Debugf("failed to close channel: %v", err)
+			}
+			continue
+		}
+
 		s.changeChannel(ch)
 		return nil
 	}
+}
+
+func (s *subscriber) presetChannel(ch *amqp.Channel) error {
+	if s.prefetchCount > 0 {
+		if err := ch.Qos(s.prefetchCount, 0, false); err != nil {
+			return fmt.Errorf("failed to set QoS: %v", err)
+		}
+	}
+
+	return nil
 }
 
 func (s *subscriber) channel() *amqp.Channel {

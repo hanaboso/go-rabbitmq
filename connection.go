@@ -27,6 +27,14 @@ func ConnectionWithConfig(config amqp.Config) func(*Connection) {
 	}
 }
 
+// ConnectionWithPrefetchLimit sets prefetch limit for every consumer.
+// This rule can't be overridden by local limit, stricter limit is applied.
+func ConnectionWithPrefetchLimit(count int) func(*Connection) {
+	return func(connection *Connection) {
+		connection.prefetchCount = count
+	}
+}
+
 // TODO define more options
 
 // Connection is wrapper over (*amqp.Connection) with ability to reconnect.
@@ -39,6 +47,7 @@ type Connection struct {
 	done            chan bool
 	closeOnce       sync.Once
 	Config          amqp.Config
+	prefetchCount   int
 }
 
 // Connect connects to provided DSN with context and returns Connection with started reconnect goroutine.
@@ -295,9 +304,33 @@ func (c *Connection) handleReconnect(ctx context.Context, dsn string) error {
 			}
 		}
 
+		if err := c.presetConnection(conn); err != nil {
+			c.logger.Debugf("failed to preset connection: %v", err)
+			if err := conn.Close(); err != nil {
+				c.logger.Debugf("failed to close connection: %v", err)
+			}
+			continue
+		}
+
 		c.changeConnection(conn)
 		return nil
 	}
+}
+
+func (c *Connection) presetConnection(conn *amqp.Connection) error {
+	ch, err := conn.Channel()
+	if err != nil {
+		return fmt.Errorf("failed to open channel: %v", err)
+	}
+	defer ch.Close()
+
+	if c.prefetchCount > 0 {
+		if err := ch.Qos(c.prefetchCount, 0, true); err != nil {
+			return fmt.Errorf("failed to set QoS: %v", err)
+		}
+	}
+
+	return nil
 }
 
 func (c *Connection) connection() *amqp.Connection {

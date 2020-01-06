@@ -19,11 +19,12 @@ func TestSubscribe(t *testing.T) {
 	dataSourceName := DSNForTest(t)
 	conn, err := rabbitmq.Connect(ctx, dataSourceName,
 		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
+		rabbitmq.ConnectionWithPrefetchLimit(20),
 	)
 	nilErr(t, err, "connection failed")
 	defer conn.Close()
 
-	sub, err := rabbitmq.NewSubscriber(ctx, conn)
+	sub, err := rabbitmq.NewSubscriber(ctx, conn, rabbitmq.SubscriberWithPrefetchLimit(10))
 	nilErr(t, err, "failed to create subscriber")
 	defer sub.Close()
 
