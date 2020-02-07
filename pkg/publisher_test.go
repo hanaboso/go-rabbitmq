@@ -1,16 +1,15 @@
-package rabbitmq_test
+package pkg_test
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-	"os"
+	"github.com/hanaboso/go-log/pkg/zap"
 	"testing"
 	"time"
 
-	"github.com/hanaboso-go/rabbitmq"
+	rabbitmq "github.com/hanaboso/go-rabbitmq/pkg"
 )
 
 func nilErr(t *testing.T, err error, args ...interface{}) {
@@ -21,25 +20,26 @@ func nilErr(t *testing.T, err error, args ...interface{}) {
 }
 
 func TestPublish(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	dataSourceName := DSNForTest(t)
-	conn, err := rabbitmq.Connect(ctx, dataSourceName,
-		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
+	conn, err := rabbitmq.Connect(
+		ctx,
+		DSNForTest(t),
+		rabbitmq.ConnectionWithLogger(zap.NewLogger()),
 	)
 	nilErr(t, err, "failed to connect")
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	const (
 		exchangeName = "my awesome exchange"
 		routingKey   = "routing.key.one"
 	)
-	nilErr(t, conn.ExchangeDeclare(ctx, exchangeName, rabbitmq.ExchangeTopic, rabbitmq.ExchangeWithDurable(true)), "exchange declaration failed")
+	nilErr(t, conn.ExchangeDeclare(ctx, rabbitmq.NewExchange(exchangeName, rabbitmq.ExchangeTopic, rabbitmq.ExchangeWithDurable(true))), "exchange declaration failed")
 
 	pub, err := rabbitmq.NewPublisher(ctx, conn)
 	nilErr(t, err)
-	defer pub.Close()
+	defer func() { _ = pub.Close() }()
 
 	msg := map[string]interface{}{
 		"message": "Hello, Consumer!",
