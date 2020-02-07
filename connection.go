@@ -1,4 +1,4 @@
-package rabbitmq
+package rabbitmq // import "github.com/hanaboso/go-rabbitmq"
 
 import (
 	"context"
@@ -148,7 +148,7 @@ func (c *Connection) exchangeDeclare(exchange Exchange) error {
 	if err != nil {
 		return err
 	}
-	defer ch.Close()
+	defer func() { _ = ch.Close() }()
 
 	return ch.ExchangeDeclare(
 		exchange.Name,             // name
@@ -203,7 +203,7 @@ func (c *Connection) queueDeclare(queue Queue) (Queue, error) {
 	if err != nil {
 		return Queue{}, err
 	}
-	defer ch.Close()
+	defer func() { _ = ch.Close() }()
 
 	q, err := ch.QueueDeclare(
 		queue.Name,             // name
@@ -271,7 +271,7 @@ func (c *Connection) queueBind(binding Binding) error {
 	if err != nil {
 		return err
 	}
-	defer ch.Close()
+	defer func() { _ = ch.Close() }()
 
 	return ch.QueueBind(
 		binding.Name,       // queue name
@@ -322,7 +322,7 @@ func (c *Connection) presetConnection(conn *amqp.Connection) error {
 	if err != nil {
 		return fmt.Errorf("failed to open channel: %v", err)
 	}
-	defer ch.Close()
+	defer func() { _ = ch.Close() }()
 
 	if c.prefetchCount > 0 {
 		if err := ch.Qos(c.prefetchCount, 0, true); err != nil {

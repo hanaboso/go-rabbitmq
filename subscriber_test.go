@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanaboso-go/rabbitmq"
+	"github.com/hanaboso/go-rabbitmq"
 )
 
 func TestSubscribe(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
 	dataSourceName := DSNForTest(t)
@@ -22,11 +22,11 @@ func TestSubscribe(t *testing.T) {
 		rabbitmq.ConnectionWithPrefetchLimit(20),
 	)
 	nilErr(t, err, "connection failed")
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	sub, err := rabbitmq.NewSubscriber(ctx, conn, rabbitmq.SubscriberWithPrefetchLimit(10))
 	nilErr(t, err, "failed to create subscriber")
-	defer sub.Close()
+	defer func() { _ = sub.Close() }()
 
 	const (
 		queueName    = "" // empty for random name

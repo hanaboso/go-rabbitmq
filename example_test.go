@@ -8,7 +8,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/hanaboso-go/rabbitmq"
+	"github.com/hanaboso/go-rabbitmq"
 )
 
 func ExamplePublisher_Publish() {
@@ -23,14 +23,14 @@ func ExamplePublisher_Publish() {
 		fmt.Printf("connection failed: %v", err)
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	pub, err := rabbitmq.NewPublisher(ctx, conn)
 	if err != nil {
 		fmt.Printf("failed to create publisher: %v", err)
 		return
 	}
-	defer pub.Close()
+	defer func() { _ = pub.Close() }()
 
 	msg := map[string]interface{}{
 		"message": "Hello, Consumer!",
@@ -62,14 +62,14 @@ func ExampleSubscriber_Subscribe() {
 		fmt.Printf("connection failed: %v", err)
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	sub, err := rabbitmq.NewSubscriber(ctx, conn)
 	if err != nil {
 		fmt.Printf("failed to create subscriber: %v", err)
 		return
 	}
-	defer sub.Close()
+	defer func() { _ = sub.Close() }()
 
 	q, err := conn.QueueDeclare(ctx, "my.routing.key", rabbitmq.QueueWithDurability(true))
 	if err != nil {

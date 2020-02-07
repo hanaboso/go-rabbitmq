@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	dockertest "github.com/hanaboso-go/rabbitmq/dockertest"
+	"github.com/hanaboso/go-rabbitmq/dockertest"
 )
 
 var rb *dockertest.RabbitMQ

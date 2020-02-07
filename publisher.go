@@ -1,4 +1,4 @@
-package rabbitmq
+package rabbitmq // import "github.com/hanaboso/go-rabbitmq"
 
 import (
 	"context"

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanaboso-go/rabbitmq"
+	"github.com/hanaboso/go-rabbitmq"
 )
 
 func nilErr(t *testing.T, err error, args ...interface{}) {
@@ -29,7 +29,7 @@ func TestPublish(t *testing.T) {
 		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
 	)
 	nilErr(t, err, "failed to connect")
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	const (
 		exchangeName = "my awesome exchange"
@@ -39,7 +39,7 @@ func TestPublish(t *testing.T) {
 
 	pub, err := rabbitmq.NewPublisher(ctx, conn)
 	nilErr(t, err)
-	defer pub.Close()
+	defer func() { _ = pub.Close() }()
 
 	msg := map[string]interface{}{
 		"message": "Hello, Consumer!",

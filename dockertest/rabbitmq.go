@@ -13,7 +13,7 @@ type RabbitMQ struct {
 	dockerResource
 }
 
-// GetMariaDB returns MariaDB instance as singleton
+// GetRabbitMQ returns RabbitMQ instance as singleton
 func GetRabbitMQ(containerName string, opts ...func(*dockerResource) error) (*RabbitMQ, error) {
 	pool, err := dockertest.NewPool("")
 	if err != nil {
@@ -26,7 +26,7 @@ func GetRabbitMQ(containerName string, opts ...func(*dockerResource) error) (*Ra
 			pool:       pool,
 			networkID:  os.Getenv("TEST_NETWORK"),
 			repository: "rabbitmq",
-			tag:        "3.7.14-alpine",
+			tag:        "alpine",
 		},
 	}
 
@@ -44,7 +44,7 @@ func GetRabbitMQ(containerName string, opts ...func(*dockerResource) error) (*Ra
 		if purgeErr := mq.pool.Purge(mq.resource); purgeErr != nil {
 			return nil, fmt.Errorf("failed to start resource and also failed to purge it: %v: %w", purgeErr, err)
 		}
-		return nil, fmt.Errorf("failed to start mariadb resource: %w", err)
+		return nil, fmt.Errorf("failed to start RabbitMQ resource: %w", err)
 	}
 
 	return &mq, nil
@@ -75,12 +75,12 @@ func rabbitMQReadyCheck(md *RabbitMQ) func() error {
 	return func() (err error) {
 		conn, err := amqp.Dial(md.DSN())
 		if err != nil {
-			return fmt.Errorf("failed to open DB connection: %w", err)
+			return fmt.Errorf("failed to open RabbitMQ connection: %w", err)
 		}
 
 		defer func() {
 			if conn.Close() != nil && err == nil {
-				err = fmt.Errorf("failed to close database connection: %w", err)
+				err = fmt.Errorf("failed to close RabbitMQ connection: %w", err)
 			}
 		}()
 
