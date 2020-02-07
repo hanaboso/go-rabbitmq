@@ -1,14 +1,14 @@
-package rabbitmq_test
+package pkg_test
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-	"os"
-
-	"github.com/hanaboso-go/rabbitmq"
+	"github.com/hanaboso/go-log/pkg/zap"
+	rabbitmq "github.com/hanaboso/go-rabbitmq/pkg"
+	"github.com/streadway/amqp"
+	"time"
 )
 
 func ExamplePublisher_Publish() {
@@ -17,20 +17,26 @@ func ExamplePublisher_Publish() {
 
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
 	conn, err := rabbitmq.Connect(ctx, dataSourceName,
-		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
+		rabbitmq.ConnectionWithLogger(zap.NewLogger()),
+		rabbitmq.ConnectionWithConfig(amqp.Config{}),
+		rabbitmq.ConnectionWithCustomBackOff(time.Millisecond, time.Second, 1, true),
 	)
 	if err != nil {
 		fmt.Printf("connection failed: %v", err)
 		return
 	}
-	defer conn.Close()
+	await := make(chan struct{})
+	defer func() {
+		_ = conn.Close()
+		await <- struct{}{}
+	}()
 
 	pub, err := rabbitmq.NewPublisher(ctx, conn)
 	if err != nil {
 		fmt.Printf("failed to create publisher: %v", err)
 		return
 	}
-	defer pub.Close()
+	defer func() { _ = pub.Close() }()
 
 	msg := map[string]interface{}{
 		"message": "Hello, Consumer!",
@@ -48,6 +54,8 @@ func ExamplePublisher_Publish() {
 		fmt.Printf("failed to publish: %v", err)
 		return
 	}
+
+	<-await
 }
 
 func ExampleSubscriber_Subscribe() {
@@ -56,22 +64,22 @@ func ExampleSubscriber_Subscribe() {
 
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
 	conn, err := rabbitmq.Connect(ctx, dataSourceName,
-		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
+		rabbitmq.ConnectionWithLogger(zap.NewLogger()),
 	)
 	if err != nil {
 		fmt.Printf("connection failed: %v", err)
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	sub, err := rabbitmq.NewSubscriber(ctx, conn)
 	if err != nil {
 		fmt.Printf("failed to create subscriber: %v", err)
 		return
 	}
-	defer sub.Close()
+	defer func() { _ = sub.Close() }()
 
-	q, err := conn.QueueDeclare(ctx, "my.routing.key", rabbitmq.QueueWithDurability(true))
+	q, err := conn.QueueDeclare(ctx, rabbitmq.NewQueue("my.routing.key", rabbitmq.QueueWithDurability(true)))
 	if err != nil {
 		fmt.Printf("failed to declare queue: %v", err)
 		return
