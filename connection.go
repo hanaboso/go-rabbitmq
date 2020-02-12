@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/streadway/amqp"
+
+	b "github.com/jpillora/backoff"
 )
 
 // ConnectionWithLogger provides connection with logger.
@@ -43,7 +45,7 @@ type Connection struct {
 	connM           sync.RWMutex
 	logger          logger
 	notifyConnClose chan *amqp.Error
-	reconnectDelay  time.Duration
+	reconnectDelay  *b.Backoff
 	done            chan bool
 	closeOnce       sync.Once
 	Config          amqp.Config
@@ -56,7 +58,7 @@ func Connect(ctx context.Context, dsn string, options ...func(*Connection)) (*Co
 	conn := Connection{
 		logger:         logger{Logger: DeafLogger()},
 		done:           make(chan bool),
-		reconnectDelay: 5 * time.Second,
+		reconnectDelay: createBackOff(),
 		Config: amqp.Config{
 			Heartbeat: 10 * time.Second, // amqp.defaultHeartbeat
 			Locale:    "en_US",          // amqp.defaultLocale
@@ -135,10 +137,12 @@ func (c *Connection) ExchangeDeclare(ctx context.Context, name string, kind Exch
 				return errors.New("connection is done")
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(c.reconnectDelay):
+			case <-time.After(c.reconnectDelay.Duration()):
 			}
 			continue
 		}
+
+		c.reconnectDelay.Reset()
 		return nil
 	}
 }
@@ -190,10 +194,12 @@ func (c *Connection) QueueDeclare(ctx context.Context, name string, options ...f
 				return Queue{}, errors.New("connection is done")
 			case <-ctx.Done():
 				return Queue{}, ctx.Err()
-			case <-time.After(c.reconnectDelay):
+			case <-time.After(c.reconnectDelay.Duration()):
 			}
 			continue
 		}
+		c.reconnectDelay.Reset()
+
 		return q, nil
 	}
 }
@@ -255,13 +261,14 @@ func (c *Connection) QueueBind(ctx context.Context, queue *Queue, key, exchange 
 				return errors.New("connection is done")
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(c.reconnectDelay):
+			case <-time.After(c.reconnectDelay.Duration()):
 			}
 			continue
 		}
 		break
 	}
 
+	c.reconnectDelay.Reset()
 	queue.bindings = append(queue.bindings, binding)
 	return nil
 }
@@ -298,7 +305,7 @@ func (c *Connection) handleReconnect(ctx context.Context, dsn string) error {
 				return fmt.Errorf("connection is closed")
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(c.reconnectDelay):
+			case <-time.After(c.reconnectDelay.Duration()):
 				c.logger.Debug("connection reconnect")
 				continue
 			}
@@ -313,6 +320,7 @@ func (c *Connection) handleReconnect(ctx context.Context, dsn string) error {
 		}
 
 		c.changeConnection(conn)
+		c.reconnectDelay.Reset()
 		return nil
 	}
 }

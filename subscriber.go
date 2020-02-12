@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/streadway/amqp"
+
+	b "github.com/jpillora/backoff"
 )
 
 // SubscriberWithLogger overrides Logger taken from Connection.
@@ -43,7 +45,8 @@ type subscriber struct {
 	logger          logger
 	done            chan bool
 	closeOnce       sync.Once
-	reconnectDelay  time.Duration
+	reconnectDelay  *b.Backoff
+	subscribeDelay  *b.Backoff
 	prefetchCount   int
 }
 
@@ -54,7 +57,8 @@ func NewSubscriber(ctx context.Context, conn *Connection, options ...func(*subsc
 		connection:     conn,
 		logger:         conn.logger,
 		done:           make(chan bool),
-		reconnectDelay: 5 * time.Second,
+		reconnectDelay: createBackOff(),
+		subscribeDelay: createBackOff(),
 	}
 
 	for _, option := range options {
@@ -107,7 +111,7 @@ func (s *subscriber) handleReconnect(ctx context.Context) error {
 				return errors.New("subscriber is done")
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(s.reconnectDelay):
+			case <-time.After(s.reconnectDelay.Duration()):
 			}
 			continue
 		}
@@ -121,6 +125,7 @@ func (s *subscriber) handleReconnect(ctx context.Context) error {
 		}
 
 		s.changeChannel(ch)
+		s.reconnectDelay.Reset()
 		return nil
 	}
 }
@@ -183,7 +188,7 @@ func (s *subscriber) Subscribe(ctx context.Context, queue *Queue, options ...fun
 				case <-s.done:
 					s.logger.Debug("subscriber is done")
 					return
-				case <-time.After(s.reconnectDelay):
+				case <-time.After(s.subscribeDelay.Duration()):
 				}
 				continue
 			}
@@ -194,6 +199,7 @@ func (s *subscriber) Subscribe(ctx context.Context, queue *Queue, options ...fun
 		}
 	}()
 
+	s.subscribeDelay.Reset()
 	return ch, nil
 }
 
@@ -218,6 +224,8 @@ func (s *subscriber) Close() error {
 	s.closeOnce.Do(func() {
 		close(s.done)
 	})
+	s.reconnectDelay.Reset()
+	s.subscribeDelay.Reset()
 
 	return s.ch.Close()
 }

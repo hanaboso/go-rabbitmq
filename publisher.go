@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	b "github.com/jpillora/backoff"
+
 	"github.com/streadway/amqp"
 )
 
@@ -25,7 +27,8 @@ type publisher struct {
 	logger          logger
 	done            chan bool
 	closeOnce       sync.Once
-	reconnectDelay  time.Duration
+	reconnectDelay  *b.Backoff
+	publishDelay    *b.Backoff
 }
 
 // NewPublisher creates Publisher that uses provided connection.
@@ -35,7 +38,8 @@ func NewPublisher(ctx context.Context, conn *Connection, options ...func(*publis
 		connection:     conn,
 		logger:         conn.logger,
 		done:           make(chan bool),
-		reconnectDelay: time.Second,
+		reconnectDelay: createBackOff(),
+		publishDelay:   createBackOff(),
 	}
 	for _, option := range options {
 		option(&p)
@@ -87,7 +91,7 @@ func (p *publisher) handleReconnect(ctx context.Context) error {
 				return errors.New("subscriber is done")
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(p.reconnectDelay):
+			case <-time.After(p.reconnectDelay.Duration()):
 			}
 			continue
 		}
@@ -98,6 +102,7 @@ func (p *publisher) handleReconnect(ctx context.Context) error {
 		}
 
 		p.changeChannel(ch)
+		p.reconnectDelay.Reset()
 		return nil
 	}
 }
@@ -133,7 +138,7 @@ func (p *publisher) Publish(ctx context.Context, exchange, key string, data []by
 			case <-p.done:
 				p.logger.Debug("publisher is done")
 				return fmt.Errorf("publisher is done")
-			case <-time.After(p.reconnectDelay):
+			case <-time.After(p.publishDelay.Duration()):
 			}
 			continue
 		}
@@ -141,9 +146,10 @@ func (p *publisher) Publish(ctx context.Context, exchange, key string, data []by
 		case confirm := <-p.notifyConfirm:
 			if confirm.Ack {
 				p.logger.Debug("Push confirmed!")
+				p.publishDelay.Reset()
 				return nil
 			}
-		case <-time.After(p.reconnectDelay):
+		case <-time.After(p.publishDelay.Duration()):
 		}
 		p.logger.Debug("Push didn't confirm. Retrying...")
 	}
@@ -189,6 +195,8 @@ func (p *publisher) Close() error {
 	p.closeOnce.Do(func() {
 		close(p.done)
 	})
+	p.reconnectDelay.Reset()
+	p.publishDelay.Reset()
 
 	return p.ch.Close()
 }

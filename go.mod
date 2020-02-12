@@ -3,6 +3,7 @@ module github.com/hanaboso/go-rabbitmq
 go 1.13
 
 require (
+	github.com/jpillora/backoff v1.0.0
 	github.com/ory/dockertest/v3 v3.5.2
 	github.com/streadway/amqp v0.0.0-20200108173154-1c71cc93ed71
 )

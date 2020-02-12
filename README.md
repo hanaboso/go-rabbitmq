@@ -4,7 +4,9 @@ Auto-reconnecting RabbitMQ client library build on top of [github.com/streadway/
 
 # TODOs
 - redeclare exchange for publish (direct exchange, declare queue??)
-- redeclare queue anb binding for subscribe.
-- persistent queue/messages
+- redeclare queue and binding for subscribe.
+- persistent messages
 - quorum queues
-- ack after publish
+- ack after publish - volitelně
+- vždy queue durable (default)
+- handling pro redelivered flag
