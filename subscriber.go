@@ -29,12 +29,16 @@ func SubscriberWithPrefetchLimit(count int) func(*subscriber) {
 	}
 }
 
+// SubscriberAddQueue adds queue into slice.
+// Added queues will be auto-declared.
 func SubscriberAddQueue(queue Queue) func(*subscriber) {
 	return func(subscriber *subscriber) {
 		subscriber.queues = append(subscriber.queues, queue)
 	}
 }
 
+// SubscriberAddExchange adds exchange into slice.
+// Added exchange will be auto-declared.
 func SubscriberAddExchange(exchange Exchange) func(*subscriber) {
 	return func(s *subscriber) {
 		s.exchanges = append(s.exchanges, exchange)
@@ -101,23 +105,19 @@ func NewSubscriber(ctx context.Context, conn *Connection, options ...func(*subsc
 
 	// Auto-declare Exchanges
 	for _, ex := range s.exchanges {
-		err := conn.ExchangeDeclare(ctx, ex.Name, ex.Type)
+		err := conn.ExchangeDeclare(ctx, ex)
 		if err != nil {
 			conn.logger.Debugf("exchange declare error: %v", err)
 		}
 	}
 
 	//Auto-declare Queues
-	for _, queue := range s.queues {
-		var err error
-		if conn.quorumQueues {
-			_, err = conn.QueueDeclare(ctx, queue.Name, QueueWithQuorumType())
-		} else {
-			_, err = conn.QueueDeclare(ctx, queue.Name, QueueWithClassicType())
-		}
+	for i, queue := range s.queues {
+		q, err := conn.QueueDeclare(ctx, queue)
 		if err != nil {
-			conn.logger.Debugf("exchange declare error: %v", err)
+			conn.logger.Debugf("queue declare error: %v", err)
 		}
+		s.queues[i] = q
 	}
 
 	return &s, nil

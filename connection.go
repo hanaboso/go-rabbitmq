@@ -36,16 +36,12 @@ func ConnectionWithPrefetchLimit(count int) func(*Connection) {
 	}
 }
 
-// ConnectionWithQuorumQueues auto-declare queues as "quorum" type
-func ConnectionWithQuorumQueues() func(*Connection) {
-	return func(connection *Connection) {
-		connection.quorumQueues = true
-	}
-}
-
-func ConnectionWithBackOff(min time.Duration, max time.Duration, factor float64, jitter bool) func(*Connection) {
+// ConnectionWithCustomBackOff sets custom back-off interval.
+func ConnectionWithCustomBackOff(min time.Duration, max time.Duration, factor float64, jitter bool) func(*Connection) {
 	return func(connection *Connection) {
 		connection.reconnectDelay = createBackOff(min, max, factor, jitter)
+		connection.publishDelay = createBackOff(min, max, factor, jitter)
+		connection.subscribeDelay = createBackOff(min, max, factor, jitter)
 	}
 }
 
@@ -60,7 +56,6 @@ type Connection struct {
 	notifyConnClose chan *amqp.Error
 	prefetchCount   int
 	publishDelay    *backoff.Backoff
-	quorumQueues    bool
 	reconnectDelay  *backoff.Backoff
 	subscribeDelay  *backoff.Backoff
 }
@@ -71,7 +66,6 @@ func Connect(ctx context.Context, dsn string, options ...func(*Connection)) (*Co
 	conn := Connection{
 		done:           make(chan bool),
 		logger:         logger{Logger: DeafLogger()},
-		quorumQueues:   false,
 		publishDelay:   defaultBackOff(),
 		subscribeDelay: defaultBackOff(),
 		reconnectDelay: defaultBackOff(),
@@ -109,7 +103,7 @@ func Connect(ctx context.Context, dsn string, options ...func(*Connection)) (*Co
 	return &conn, nil
 }
 
-// Close closes connection
+// Close closes connection.
 func (c *Connection) Close() error {
 	c.closeOnce.Do(func() {
 		close(c.done)
@@ -124,6 +118,7 @@ func (c *Connection) Close() error {
 	return c.conn.Close()
 }
 
+// NewExchange returns new exchange.
 func NewExchange(name string, kind ExchangeType, options ...func(exchange *Exchange)) Exchange {
 	exchange := Exchange{
 		Name: name,
@@ -136,10 +131,8 @@ func NewExchange(name string, kind ExchangeType, options ...func(exchange *Excha
 	return exchange
 }
 
-// ExchangeDeclare declares exchange with context
-func (c *Connection) ExchangeDeclare(ctx context.Context, name string, kind ExchangeType, options ...func(*Exchange)) error {
-	exchange := NewExchange(name, kind, options...)
-
+// ExchangeDeclare declares exchange with context.
+func (c *Connection) ExchangeDeclare(ctx context.Context, exchange Exchange) error {
 	for {
 		if err := c.exchangeDeclare(exchange); err != nil {
 			var aErr *amqp.Error
@@ -187,6 +180,7 @@ func (c *Connection) exchangeDeclare(exchange Exchange) error {
 	)
 }
 
+// NewQueue returns new Queue.
 func NewQueue(name string, options ...func(*Queue)) Queue {
 	queue := Queue{
 		Name: name,
@@ -199,10 +193,8 @@ func NewQueue(name string, options ...func(*Queue)) Queue {
 	return queue
 }
 
-// QueueDeclare declares queue with context
-func (c *Connection) QueueDeclare(ctx context.Context, name string, options ...func(*Queue)) (Queue, error) {
-	queue := NewQueue(name, options...)
-
+// QueueDeclare declares queue with context.
+func (c *Connection) QueueDeclare(ctx context.Context, queue Queue) (Queue, error) {
 	for {
 		q, err := c.queueDeclare(queue)
 		if err != nil {

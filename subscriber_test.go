@@ -33,9 +33,9 @@ func TestSubscribe(t *testing.T) {
 	nilErr(t, err, "failed to create subscriber")
 	defer func() { _ = sub.Close() }()
 
-	q, err := conn.QueueDeclare(ctx, queueName, rabbitmq.QueueWithAutoDelete(true))
+	q, err := conn.QueueDeclare(ctx, rabbitmq.NewQueue(queueName, rabbitmq.QueueWithAutoDelete(true)))
 	nilErr(t, err, "queue declaration failed")
-	nilErr(t, conn.ExchangeDeclare(ctx, exchangeName, rabbitmq.ExchangeTopic, rabbitmq.ExchangeWithDurable(true)), "exchange declaration failed")
+	nilErr(t, conn.ExchangeDeclare(ctx, rabbitmq.NewExchange(exchangeName, rabbitmq.ExchangeTopic, rabbitmq.ExchangeWithDurable(true))), "exchange declaration failed")
 	nilErr(t, conn.QueueBind(ctx, &q, routingKey, exchangeName), "queue bind failed")
 
 	msgs, err := sub.Subscribe(ctx, &q, rabbitmq.SubscriptionWithConsumer("Hello, i'm Mr. Meeseek, look at me!"))
@@ -103,12 +103,11 @@ func TestSubscribeQueueQuorum(t *testing.T) {
 		DSNForTest(t),
 		rabbitmq.ConnectionWithLogger(logger, rabbitmq.Debug),
 		rabbitmq.ConnectionWithPrefetchLimit(20),
-		rabbitmq.ConnectionWithQuorumQueues(),
 	)
 	nilErr(t, err, "connection failed")
 	defer func() { _ = conn.Close() }()
 
-	q := rabbitmq.NewQueue(queueName)
+	q := rabbitmq.NewQueue(queueName, rabbitmq.QueueWithQuorumType())
 	sub, err := rabbitmq.NewSubscriber(
 		ctx,
 		conn,
@@ -160,7 +159,7 @@ func TestSubscribeExchange(t *testing.T) {
 	nilErr(t, err, "failed to create subscriber")
 	defer func() { _ = sub.Close() }()
 
-	q, err := conn.QueueDeclare(ctx, queueName, rabbitmq.QueueWithAutoDelete(true), rabbitmq.QueueWithClassicType())
+	q, err := conn.QueueDeclare(ctx, rabbitmq.NewQueue(queueName, rabbitmq.QueueWithAutoDelete(true), rabbitmq.QueueWithClassicType()))
 	nilErr(t, err, "queue declaration failed")
 	nilErr(t, conn.QueueBind(ctx, &q, routingKey, exchangeName), "queue bind failed")
 

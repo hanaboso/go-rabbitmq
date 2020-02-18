@@ -71,7 +71,7 @@ func ExampleSubscriber_Subscribe() {
 	}
 	defer func() { _ = sub.Close() }()
 
-	q, err := conn.QueueDeclare(ctx, "my.routing.key", rabbitmq.QueueWithDurability(true))
+	q, err := conn.QueueDeclare(ctx, rabbitmq.NewQueue("my.routing.key", rabbitmq.QueueWithDurability(true)))
 	if err != nil {
 		fmt.Printf("failed to declare queue: %v", err)
 		return

@@ -7,7 +7,7 @@ import (
 	"github.com/streadway/amqp"
 )
 
-// ExchangeType is type for exchange type constants
+// ExchangeType is type for exchange type constants.
 type ExchangeType string
 
 // Constants for standard AMQP 0-9-1 exchange types.
@@ -69,18 +69,18 @@ func (m *Message) AckMultiple() error {
 	return m.Delivery.Ack(true)
 }
 
-// Nack is for negatively message acknowledgment
+// Nack is for negatively message acknowledgment.
 func (m *Message) Nack(requeue bool) error {
 	return m.Delivery.Nack(false, requeue)
 }
 
-// NackMultiple is for multiple negatively message acknowledgment
+// NackMultiple is for multiple negatively message acknowledgment.
 // Nack messages up to and including delivered messages up until the delivery tag delivered on the same channel.
 func (m *Message) NackMultiple(requeue bool) error {
 	return m.Delivery.Nack(true, requeue)
 }
 
-// DeliveryMode is type for delivery mode constants
+// DeliveryMode is type for delivery mode constants.
 type DeliveryMode uint8
 
 // Constants for standard AMQP 0-9-1 delivery modes.
@@ -252,8 +252,10 @@ func ExchangeWithArguments(args Arguments) func(*Exchange) {
 	}
 }
 
+// QueueType is type for queue type constants.
 type QueueType string
 
+// Constants for standard AMQP 0-9-1 x-queue-type.
 const (
 	QuorumType  QueueType = "quorum"
 	ClassicType QueueType = "classic"
@@ -271,14 +273,14 @@ type Queue struct {
 	bindings []Binding
 }
 
-// QueueWithQuorumType wil declare Queue as quorum type
+// QueueWithQuorumType wil declare Queue as quorum type.
 func QueueWithQuorumType() func(*Queue) {
 	return func(queue *Queue) {
 		queue.Args["x-queue-type"] = string(QuorumType)
 	}
 }
 
-// QueueWithClassicType wil declare Queue as classic type
+// QueueWithClassicType wil declare Queue as classic type.
 func QueueWithClassicType() func(*Queue) {
 	return func(queue *Queue) {
 		queue.Args["x-queue-type"] = string(ClassicType)

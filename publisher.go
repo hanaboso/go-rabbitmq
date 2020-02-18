@@ -18,12 +18,16 @@ func PublisherWithPublishAck() func(*publisher) {
 	}
 }
 
+// PublisherAddQueue adds queue into slice.
+// Added queues will be auto-declared.
 func PublisherAddQueue(queue Queue) func(*publisher) {
 	return func(p *publisher) {
 		p.queues = append(p.queues, queue)
 	}
 }
 
+// PublisherAddExchange adds exchange into slice.
+// Added exchange will be auto-declared.
 func PublisherAddExchange(exchange Exchange) func(*publisher) {
 	return func(p *publisher) {
 		p.exchanges = append(p.exchanges, exchange)
@@ -91,23 +95,19 @@ func NewPublisher(ctx context.Context, conn *Connection, options ...func(*publis
 
 	// Auto declare Exchanges
 	for _, ex := range p.exchanges {
-		err := conn.ExchangeDeclare(nil, ex.Name, ex.Type)
+		err := conn.ExchangeDeclare(nil, ex)
 		if err != nil {
 			conn.logger.Debugf("exchange declare error: %v", err)
 		}
 	}
 
 	// Auto declare Queues
-	for _, queue := range p.queues {
-		var err error
-		if conn.quorumQueues {
-			_, err = conn.QueueDeclare(ctx, queue.Name, QueueWithQuorumType())
-		} else {
-			_, err = conn.QueueDeclare(ctx, queue.Name, QueueWithClassicType())
-		}
+	for i, queue := range p.queues {
+		q, err := conn.QueueDeclare(ctx, queue)
 		if err != nil {
-			conn.logger.Debugf("exchange declare error: %v", err)
+			conn.logger.Debugf("queue declare error: %v", err)
 		}
+		p.queues[i] = q
 	}
 
 	return &p, nil

@@ -58,7 +58,7 @@ func (l *logger) Debugf(format string, v ...interface{}) {
 	l.Logger.Print(fmt.Sprintf(format, v...))
 }
 
-// DeafLogger returns logger that uses ioutil.Discard as output
+// DeafLogger returns logger that uses ioutil.Discard as output.
 func DeafLogger() Logger {
 	return log.New(ioutil.Discard, "", 0)
 }

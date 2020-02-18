@@ -36,7 +36,7 @@ func TestPublish(t *testing.T) {
 		exchangeName = "my awesome exchange"
 		routingKey   = "routing.key.one"
 	)
-	nilErr(t, conn.ExchangeDeclare(ctx, exchangeName, rabbitmq.ExchangeTopic, rabbitmq.ExchangeWithDurable(true)), "exchange declaration failed")
+	nilErr(t, conn.ExchangeDeclare(ctx, rabbitmq.NewExchange(exchangeName, rabbitmq.ExchangeTopic, rabbitmq.ExchangeWithDurable(true))), "exchange declaration failed")
 
 	pub, err := rabbitmq.NewPublisher(ctx, conn)
 	nilErr(t, err)
