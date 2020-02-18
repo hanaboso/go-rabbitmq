@@ -9,6 +9,7 @@ import (
 	"github.com/streadway/amqp"
 )
 
+// RabbitMQ struct
 type RabbitMQ struct {
 	dockerResource
 }
@@ -50,13 +51,13 @@ func GetRabbitMQ(containerName string, opts ...func(*dockerResource) error) (*Ra
 	return &mq, nil
 }
 
+// DSN returns RabbitMQ dsn
 func (r *RabbitMQ) DSN() string {
 	return fmt.Sprintf("amqp://guest:guest@%s/", r.Addr(5672))
 }
 
+// LoadOrCreateResource loads resource if exist
 func (r *RabbitMQ) LoadOrCreateResource(containerName string) error {
-	// TODO load
-
 	res, err := r.pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: r.repository,
 		Tag:        r.tag,

@@ -21,11 +21,12 @@ func nilErr(t *testing.T, err error, args ...interface{}) {
 }
 
 func TestPublish(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	dataSourceName := DSNForTest(t)
-	conn, err := rabbitmq.Connect(ctx, dataSourceName,
+	conn, err := rabbitmq.Connect(
+		ctx,
+		DSNForTest(t),
 		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
 	)
 	nilErr(t, err, "failed to connect")

@@ -1,4 +1,4 @@
-package rabbitmq // import "github.com/hanaboso/go-rabbitmq"
+package rabbitmq
 
 import (
 	"io"
@@ -153,8 +153,6 @@ func PublishingWithDeliveryMode(deliveryMode DeliveryMode) func(*Publishing) {
 	}
 }
 
-// TODO define more options
-
 // Subscription contains all parameters for (*amqp.Channel).Consume method.
 type Subscription struct {
 	Queue     string
@@ -254,6 +252,13 @@ func ExchangeWithArguments(args Arguments) func(*Exchange) {
 	}
 }
 
+type QueueType string
+
+const (
+	QuorumType  QueueType = "quorum"
+	ClassicType QueueType = "classic"
+)
+
 // Queue contains all parameters for (*amqp.Channel).QueueDeclare method.
 type Queue struct {
 	Name       string
@@ -264,6 +269,20 @@ type Queue struct {
 	Args       Arguments
 
 	bindings []Binding
+}
+
+// QueueWithQuorumType wil declare Queue as quorum type
+func QueueWithQuorumType() func(*Queue) {
+	return func(queue *Queue) {
+		queue.Args["x-queue-type"] = string(QuorumType)
+	}
+}
+
+// QueueWithClassicType wil declare Queue as classic type
+func QueueWithClassicType() func(*Queue) {
+	return func(queue *Queue) {
+		queue.Args["x-queue-type"] = string(ClassicType)
+	}
 }
 
 // QueueWithDurability provides queue with durable.

@@ -7,6 +7,7 @@ import (
 	"github.com/ory/dockertest/v3"
 )
 
+// WithTag run image with specific tag
 func WithTag(tag string) func(d *dockerResource) error {
 	return func(d *dockerResource) error {
 		d.tag = tag

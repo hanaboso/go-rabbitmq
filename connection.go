@@ -1,4 +1,4 @@
-package rabbitmq // import "github.com/hanaboso/go-rabbitmq"
+package rabbitmq
 
 import (
 	"context"
@@ -7,9 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jpillora/backoff"
 	"github.com/streadway/amqp"
-
-	b "github.com/jpillora/backoff"
 )
 
 // ConnectionWithLogger provides connection with logger.
@@ -37,28 +36,45 @@ func ConnectionWithPrefetchLimit(count int) func(*Connection) {
 	}
 }
 
-// TODO define more options
+// ConnectionWithQuorumQueues auto-declare queues as "quorum" type
+func ConnectionWithQuorumQueues() func(*Connection) {
+	return func(connection *Connection) {
+		connection.quorumQueues = true
+	}
+}
+
+func ConnectionWithBackOff(min time.Duration, max time.Duration, factor float64, jitter bool) func(*Connection) {
+	return func(connection *Connection) {
+		connection.reconnectDelay = createBackOff(min, max, factor, jitter)
+	}
+}
 
 // Connection is wrapper over (*amqp.Connection) with ability to reconnect.
 type Connection struct {
+	Config          amqp.Config
+	closeOnce       sync.Once
 	conn            *amqp.Connection
 	connM           sync.RWMutex
+	done            chan bool
 	logger          logger
 	notifyConnClose chan *amqp.Error
-	reconnectDelay  *b.Backoff
-	done            chan bool
-	closeOnce       sync.Once
-	Config          amqp.Config
 	prefetchCount   int
+	publishDelay    *backoff.Backoff
+	quorumQueues    bool
+	reconnectDelay  *backoff.Backoff
+	subscribeDelay  *backoff.Backoff
 }
 
 // Connect connects to provided DSN with context and returns Connection with started reconnect goroutine.
 // Connection reconnect doesn't rely on context.
 func Connect(ctx context.Context, dsn string, options ...func(*Connection)) (*Connection, error) {
 	conn := Connection{
-		logger:         logger{Logger: DeafLogger()},
 		done:           make(chan bool),
-		reconnectDelay: createBackOff(),
+		logger:         logger{Logger: DeafLogger()},
+		quorumQueues:   false,
+		publishDelay:   defaultBackOff(),
+		subscribeDelay: defaultBackOff(),
+		reconnectDelay: defaultBackOff(),
 		Config: amqp.Config{
 			Heartbeat: 10 * time.Second, // amqp.defaultHeartbeat
 			Locale:    "en_US",          // amqp.defaultLocale
@@ -108,8 +124,7 @@ func (c *Connection) Close() error {
 	return c.conn.Close()
 }
 
-// ExchangeDeclare declares exchange with context
-func (c *Connection) ExchangeDeclare(ctx context.Context, name string, kind ExchangeType, options ...func(*Exchange)) error {
+func NewExchange(name string, kind ExchangeType, options ...func(exchange *Exchange)) Exchange {
 	exchange := Exchange{
 		Name: name,
 		Type: kind,
@@ -117,6 +132,13 @@ func (c *Connection) ExchangeDeclare(ctx context.Context, name string, kind Exch
 	for _, option := range options {
 		option(&exchange)
 	}
+
+	return exchange
+}
+
+// ExchangeDeclare declares exchange with context
+func (c *Connection) ExchangeDeclare(ctx context.Context, name string, kind ExchangeType, options ...func(*Exchange)) error {
+	exchange := NewExchange(name, kind, options...)
 
 	for {
 		if err := c.exchangeDeclare(exchange); err != nil {
@@ -165,14 +187,21 @@ func (c *Connection) exchangeDeclare(exchange Exchange) error {
 	)
 }
 
-// QueueDeclare declares queue with context
-func (c *Connection) QueueDeclare(ctx context.Context, name string, options ...func(*Queue)) (Queue, error) {
+func NewQueue(name string, options ...func(*Queue)) Queue {
 	queue := Queue{
 		Name: name,
+		Args: Arguments{},
 	}
 	for _, option := range options {
 		option(&queue)
 	}
+
+	return queue
+}
+
+// QueueDeclare declares queue with context
+func (c *Connection) QueueDeclare(ctx context.Context, name string, options ...func(*Queue)) (Queue, error) {
+	queue := NewQueue(name, options...)
 
 	for {
 		q, err := c.queueDeclare(queue)

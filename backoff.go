@@ -3,14 +3,18 @@ package rabbitmq
 import (
 	"time"
 
-	b "github.com/jpillora/backoff"
+	"github.com/jpillora/backoff"
 )
 
-func createBackOff() *b.Backoff {
-	return &b.Backoff{
-		Min:    100 * time.Millisecond,
-		Max:    2 * time.Minute,
-		Factor: 2,
-		Jitter: true,
+func defaultBackOff() *backoff.Backoff {
+	return createBackOff(100*time.Millisecond, 2*time.Minute, 2, true)
+}
+
+func createBackOff(min time.Duration, max time.Duration, factor float64, jitter bool) *backoff.Backoff {
+	return &backoff.Backoff{
+		Min:    min,
+		Max:    max,
+		Factor: factor,
+		Jitter: jitter,
 	}
 }

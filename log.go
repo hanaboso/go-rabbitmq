@@ -1,4 +1,4 @@
-package rabbitmq // import "github.com/hanaboso/go-rabbitmq"
+package rabbitmq
 
 // The logging interface is forwarding this blog post.
 // https://dave.cheney.net/2015/11/05/lets-talk-about-logging

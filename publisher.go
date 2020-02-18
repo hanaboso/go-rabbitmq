@@ -1,4 +1,4 @@
-package rabbitmq // import "github.com/hanaboso/go-rabbitmq"
+package rabbitmq
 
 import (
 	"context"
@@ -7,10 +7,28 @@ import (
 	"sync"
 	"time"
 
-	b "github.com/jpillora/backoff"
-
 	"github.com/streadway/amqp"
 )
+
+// PublisherWithPublishAck allow change ack mode.
+// Publisher will not wait for ack by default.
+func PublisherWithPublishAck() func(*publisher) {
+	return func(p *publisher) {
+		p.ack = true
+	}
+}
+
+func PublisherAddQueue(queue Queue) func(*publisher) {
+	return func(p *publisher) {
+		p.queues = append(p.queues, queue)
+	}
+}
+
+func PublisherAddExchange(exchange Exchange) func(*publisher) {
+	return func(p *publisher) {
+		p.exchanges = append(p.exchanges, exchange)
+	}
+}
 
 // Publisher is interface that provides all necessary methods for publishing.
 type Publisher interface {
@@ -19,27 +37,27 @@ type Publisher interface {
 }
 
 type publisher struct {
-	connection      *Connection
+	ack             bool
 	ch              *amqp.Channel
 	chM             sync.RWMutex
+	closeOnce       sync.Once
+	connection      *Connection
+	done            chan bool
+	exchanges       []Exchange
+	logger          logger
 	notifyChanClose chan *amqp.Error
 	notifyConfirm   chan amqp.Confirmation
-	logger          logger
-	done            chan bool
-	closeOnce       sync.Once
-	reconnectDelay  *b.Backoff
-	publishDelay    *b.Backoff
+	queues          []Queue
 }
 
 // NewPublisher creates Publisher that uses provided connection.
 // Publisher reconnect doesn't rely on context.
 func NewPublisher(ctx context.Context, conn *Connection, options ...func(*publisher)) (Publisher, error) {
 	p := publisher{
-		connection:     conn,
-		logger:         conn.logger,
-		done:           make(chan bool),
-		reconnectDelay: createBackOff(),
-		publishDelay:   createBackOff(),
+		connection: conn,
+		logger:     conn.logger,
+		ack:        false,
+		done:       make(chan bool),
 	}
 	for _, option := range options {
 		option(&p)
@@ -71,6 +89,27 @@ func NewPublisher(ctx context.Context, conn *Connection, options ...func(*publis
 		}
 	}()
 
+	// Auto declare Exchanges
+	for _, ex := range p.exchanges {
+		err := conn.ExchangeDeclare(nil, ex.Name, ex.Type)
+		if err != nil {
+			conn.logger.Debugf("exchange declare error: %v", err)
+		}
+	}
+
+	// Auto declare Queues
+	for _, queue := range p.queues {
+		var err error
+		if conn.quorumQueues {
+			_, err = conn.QueueDeclare(ctx, queue.Name, QueueWithQuorumType())
+		} else {
+			_, err = conn.QueueDeclare(ctx, queue.Name, QueueWithClassicType())
+		}
+		if err != nil {
+			conn.logger.Debugf("exchange declare error: %v", err)
+		}
+	}
+
 	return &p, nil
 }
 
@@ -91,7 +130,7 @@ func (p *publisher) handleReconnect(ctx context.Context) error {
 				return errors.New("subscriber is done")
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(p.reconnectDelay.Duration()):
+			case <-time.After(p.connection.reconnectDelay.Duration()):
 			}
 			continue
 		}
@@ -102,7 +141,7 @@ func (p *publisher) handleReconnect(ctx context.Context) error {
 		}
 
 		p.changeChannel(ch)
-		p.reconnectDelay.Reset()
+		p.connection.reconnectDelay.Reset()
 		return nil
 	}
 }
@@ -138,30 +177,36 @@ func (p *publisher) Publish(ctx context.Context, exchange, key string, data []by
 			case <-p.done:
 				p.logger.Debug("publisher is done")
 				return fmt.Errorf("publisher is done")
-			case <-time.After(p.publishDelay.Duration()):
+			case <-time.After(p.connection.publishDelay.Duration()):
 			}
 			continue
 		}
-		select {
-		case confirm := <-p.notifyConfirm:
-			if confirm.Ack {
-				p.logger.Debug("Push confirmed!")
-				p.publishDelay.Reset()
-				return nil
+
+		if p.ack {
+			select {
+			case confirm := <-p.notifyConfirm:
+				if confirm.Ack {
+					p.logger.Debug("Push confirmed!")
+					p.connection.publishDelay.Reset()
+					return nil
+				}
+			case <-time.After(p.connection.publishDelay.Duration()):
 			}
-		case <-time.After(p.publishDelay.Duration()):
+			p.logger.Debug("Push didn't confirm. Retrying...")
 		}
-		p.logger.Debug("Push didn't confirm. Retrying...")
+
+		return nil
 	}
 }
 
 func (p *publisher) publish(exchange, key string, data []byte, options ...func(*Publishing)) error {
 	pub := Publishing{
-		ContentType: "text/plain",
-		Timestamp:   time.Now().UTC(),
-		Exchange:    exchange,
-		RoutingKey:  key,
-		Body:        data,
+		ContentType:  "text/plain",
+		Timestamp:    time.Now().UTC(),
+		Exchange:     exchange,
+		RoutingKey:   key,
+		Body:         data,
+		DeliveryMode: Persistent,
 	}
 
 	for _, option := range options {
@@ -195,8 +240,8 @@ func (p *publisher) Close() error {
 	p.closeOnce.Do(func() {
 		close(p.done)
 	})
-	p.reconnectDelay.Reset()
-	p.publishDelay.Reset()
+	p.connection.reconnectDelay.Reset()
+	p.connection.publishDelay.Reset()
 
 	return p.ch.Close()
 }

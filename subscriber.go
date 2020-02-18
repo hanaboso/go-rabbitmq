@@ -1,4 +1,4 @@
-package rabbitmq // import "github.com/hanaboso/go-rabbitmq"
+package rabbitmq
 
 import (
 	"context"
@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/streadway/amqp"
-
-	b "github.com/jpillora/backoff"
 )
 
 // SubscriberWithLogger overrides Logger taken from Connection.
@@ -31,6 +29,18 @@ func SubscriberWithPrefetchLimit(count int) func(*subscriber) {
 	}
 }
 
+func SubscriberAddQueue(queue Queue) func(*subscriber) {
+	return func(subscriber *subscriber) {
+		subscriber.queues = append(subscriber.queues, queue)
+	}
+}
+
+func SubscriberAddExchange(exchange Exchange) func(*subscriber) {
+	return func(s *subscriber) {
+		s.exchanges = append(s.exchanges, exchange)
+	}
+}
+
 // Subscriber is interface that provides all necessary methods for subscribing.
 type Subscriber interface {
 	Subscribe(ctx context.Context, queue *Queue, options ...func(*Subscription)) (<-chan Message, error)
@@ -38,27 +48,25 @@ type Subscriber interface {
 }
 
 type subscriber struct {
-	connection      *Connection
 	ch              *amqp.Channel
 	chM             sync.RWMutex
-	notifyChanClose chan *amqp.Error
-	logger          logger
-	done            chan bool
 	closeOnce       sync.Once
-	reconnectDelay  *b.Backoff
-	subscribeDelay  *b.Backoff
+	connection      *Connection
+	done            chan bool
+	exchanges       []Exchange
+	logger          logger
+	notifyChanClose chan *amqp.Error
 	prefetchCount   int
+	queues          []Queue
 }
 
 // NewSubscriber creates Subscriber that uses provided connection.
 // Subscriber reconnect doesn't rely on context.
 func NewSubscriber(ctx context.Context, conn *Connection, options ...func(*subscriber)) (Subscriber, error) {
 	s := subscriber{
-		connection:     conn,
-		logger:         conn.logger,
-		done:           make(chan bool),
-		reconnectDelay: createBackOff(),
-		subscribeDelay: createBackOff(),
+		connection: conn,
+		logger:     conn.logger,
+		done:       make(chan bool),
 	}
 
 	for _, option := range options {
@@ -91,6 +99,27 @@ func NewSubscriber(ctx context.Context, conn *Connection, options ...func(*subsc
 		}
 	}()
 
+	// Auto-declare Exchanges
+	for _, ex := range s.exchanges {
+		err := conn.ExchangeDeclare(ctx, ex.Name, ex.Type)
+		if err != nil {
+			conn.logger.Debugf("exchange declare error: %v", err)
+		}
+	}
+
+	//Auto-declare Queues
+	for _, queue := range s.queues {
+		var err error
+		if conn.quorumQueues {
+			_, err = conn.QueueDeclare(ctx, queue.Name, QueueWithQuorumType())
+		} else {
+			_, err = conn.QueueDeclare(ctx, queue.Name, QueueWithClassicType())
+		}
+		if err != nil {
+			conn.logger.Debugf("exchange declare error: %v", err)
+		}
+	}
+
 	return &s, nil
 }
 
@@ -111,7 +140,7 @@ func (s *subscriber) handleReconnect(ctx context.Context) error {
 				return errors.New("subscriber is done")
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(s.reconnectDelay.Duration()):
+			case <-time.After(s.connection.reconnectDelay.Duration()):
 			}
 			continue
 		}
@@ -125,7 +154,7 @@ func (s *subscriber) handleReconnect(ctx context.Context) error {
 		}
 
 		s.changeChannel(ch)
-		s.reconnectDelay.Reset()
+		s.connection.reconnectDelay.Reset()
 		return nil
 	}
 }
@@ -159,11 +188,10 @@ func (s *subscriber) Subscribe(ctx context.Context, queue *Queue, options ...fun
 	subscription := Subscription{
 		Queue: queue.Name,
 	}
+
 	for _, option := range options {
 		option(&subscription)
 	}
-
-	// TODO use *Queue to recover queue definition + binding
 
 	ch := make(chan Message)
 	go func() {
@@ -188,7 +216,7 @@ func (s *subscriber) Subscribe(ctx context.Context, queue *Queue, options ...fun
 				case <-s.done:
 					s.logger.Debug("subscriber is done")
 					return
-				case <-time.After(s.subscribeDelay.Duration()):
+				case <-time.After(s.connection.subscribeDelay.Duration()):
 				}
 				continue
 			}
@@ -199,7 +227,7 @@ func (s *subscriber) Subscribe(ctx context.Context, queue *Queue, options ...fun
 		}
 	}()
 
-	s.subscribeDelay.Reset()
+	s.connection.subscribeDelay.Reset()
 	return ch, nil
 }
 
@@ -224,8 +252,8 @@ func (s *subscriber) Close() error {
 	s.closeOnce.Do(func() {
 		close(s.done)
 	})
-	s.reconnectDelay.Reset()
-	s.subscribeDelay.Reset()
+	s.connection.reconnectDelay.Reset()
+	s.connection.subscribeDelay.Reset()
 
 	return s.ch.Close()
 }
