@@ -1,4 +1,4 @@
-package rabbitmq
+package pkg
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/streadway/amqp"
+
+	log "github.com/hanaboso/go-log/pkg"
 )
 
 // PublisherWithPublishAck allow change ack mode.
@@ -48,7 +50,7 @@ type publisher struct {
 	connection      *Connection
 	done            chan bool
 	exchanges       []Exchange
-	logger          logger
+	logger          log.Logger
 	notifyChanClose chan *amqp.Error
 	notifyConfirm   chan amqp.Confirmation
 	queues          []Queue
@@ -76,7 +78,9 @@ func NewPublisher(ctx context.Context, conn *Connection, options ...func(*publis
 			case <-conn.done:
 				p.logger.Debug("connection is done, closing publisher")
 				if err := p.Close(); err != nil {
-					p.logger.Debugf("failed to close publisher: %v", err)
+					p.logger.WithFields(map[string]interface{}{
+						"error": err.Error(),
+					}).Debug("failed to close publisher")
 				}
 			case <-p.done:
 				p.logger.Debug("publisher is done")
@@ -85,9 +89,13 @@ func NewPublisher(ctx context.Context, conn *Connection, options ...func(*publis
 				if err == nil {
 					return
 				}
-				p.logger.Debugf("channel closed: %v", err)
+				p.logger.WithFields(map[string]interface{}{
+					"error": err.Error(),
+				}).Debug("channel closed")
 				if err := p.handleReconnect(context.Background()); err != nil {
-					conn.logger.Debugf("reconnect error: %v", err)
+					p.logger.WithFields(map[string]interface{}{
+						"error": err.Error(),
+					}).Debug("reconnect")
 				}
 			}
 		}
@@ -97,7 +105,9 @@ func NewPublisher(ctx context.Context, conn *Connection, options ...func(*publis
 	for _, ex := range p.exchanges {
 		err := conn.ExchangeDeclare(nil, ex)
 		if err != nil {
-			conn.logger.Debugf("exchange declare error: %v", err)
+			p.logger.WithFields(map[string]interface{}{
+				"error": err.Error(),
+			}).Debug("exchange declare")
 		}
 	}
 
@@ -105,7 +115,9 @@ func NewPublisher(ctx context.Context, conn *Connection, options ...func(*publis
 	for i, queue := range p.queues {
 		q, err := conn.QueueDeclare(ctx, queue)
 		if err != nil {
-			conn.logger.Debugf("queue declare error: %v", err)
+			p.logger.WithFields(map[string]interface{}{
+				"error": err.Error(),
+			}).Debug("queue declare")
 		}
 		p.queues[i] = q
 	}
@@ -117,16 +129,22 @@ func (p *publisher) handleReconnect(ctx context.Context) error {
 	for {
 		ch, err := p.connection.connection().Channel()
 		if err != nil {
-			p.logger.Debugf("failed to open channel: %v", err)
+			p.logger.WithFields(map[string]interface{}{
+				"error": err.Error(),
+			}).Debug("failed to open channel")
 			select {
 			case <-p.connection.done:
 				p.logger.Debug("connection is done, closing publisher")
 				// closing self cause graceful shutdown by (*publisher).done channel
 				if err := p.Close(); err != nil {
-					p.logger.Debugf("failed to close publisher: %v", err)
+					p.logger.WithFields(map[string]interface{}{
+						"error": err.Error(),
+					}).Debug("failed to close publisher")
 				}
 			case <-p.done:
-				p.logger.Debug("publisher is done")
+				p.logger.WithFields(map[string]interface{}{
+					"error": err.Error(),
+				}).Debug("publisher is done")
 				return errors.New("subscriber is done")
 			case <-ctx.Done():
 				return ctx.Err()
@@ -136,7 +154,9 @@ func (p *publisher) handleReconnect(ctx context.Context) error {
 		}
 
 		if err := ch.Confirm(false); err != nil {
-			p.logger.Debugf("failed to set to confirm mode: %v", err)
+			p.logger.WithFields(map[string]interface{}{
+				"error": err.Error(),
+			}).Debug("failed to set to confirm mode")
 			continue
 		}
 
@@ -166,7 +186,9 @@ func (p *publisher) changeChannel(channel *amqp.Channel) {
 func (p *publisher) Publish(ctx context.Context, exchange, key string, data []byte, options ...func(*Publishing)) error {
 	for {
 		if err := p.publish(exchange, key, data, options...); err != nil {
-			p.logger.Debugf("Push failed: %v", err)
+			p.logger.WithFields(map[string]interface{}{
+				"error": err.Error(),
+			}).Debug("Push failed")
 			if !errors.Is(err, &amqp.Error{}) {
 				return err
 			}

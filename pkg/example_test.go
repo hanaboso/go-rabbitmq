@@ -1,14 +1,14 @@
-package rabbitmq_test
+package pkg_test
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-	"os"
 
-	"github.com/hanaboso/go-rabbitmq"
+	"github.com/hanaboso/go-log/pkg/zap"
+
+	rabbitmq "github.com/hanaboso/go-rabbitmq/pkg"
 )
 
 func ExamplePublisher_Publish() {
@@ -17,7 +17,7 @@ func ExamplePublisher_Publish() {
 
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
 	conn, err := rabbitmq.Connect(ctx, dataSourceName,
-		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
+		rabbitmq.ConnectionWithLogger(zap.NewLogger()),
 	)
 	if err != nil {
 		fmt.Printf("connection failed: %v", err)
@@ -56,7 +56,7 @@ func ExampleSubscriber_Subscribe() {
 
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
 	conn, err := rabbitmq.Connect(ctx, dataSourceName,
-		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
+		rabbitmq.ConnectionWithLogger(zap.NewLogger()),
 	)
 	if err != nil {
 		fmt.Printf("connection failed: %v", err)

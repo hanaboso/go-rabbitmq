@@ -1,4 +1,4 @@
-package rabbitmq
+package pkg
 
 import (
 	"context"
@@ -8,15 +8,14 @@ import (
 	"time"
 
 	"github.com/streadway/amqp"
+
+	log "github.com/hanaboso/go-log/pkg"
 )
 
 // SubscriberWithLogger overrides Logger taken from Connection.
-func SubscriberWithLogger(log Logger, level LoggingLevel) func(*subscriber) {
+func SubscriberWithLogger(log log.Logger) func(*subscriber) {
 	return func(s *subscriber) {
-		s.logger = logger{
-			Logger: log,
-			level:  level,
-		}
+		s.logger = log
 	}
 }
 
@@ -58,7 +57,7 @@ type subscriber struct {
 	connection      *Connection
 	done            chan bool
 	exchanges       []Exchange
-	logger          logger
+	logger          log.Logger
 	notifyChanClose chan *amqp.Error
 	prefetchCount   int
 	queues          []Queue
@@ -86,7 +85,9 @@ func NewSubscriber(ctx context.Context, conn *Connection, options ...func(*subsc
 			case <-conn.done:
 				s.logger.Debug("connection is done, closing subscriber")
 				if err := s.Close(); err != nil {
-					s.logger.Debugf("failed to close subscriber: %v", err)
+					s.logger.WithFields(map[string]interface{}{
+						"error": err.Error(),
+					}).Debug("failed to close subscriber")
 				}
 			case <-s.done:
 				s.logger.Debug("subscriber is done")
@@ -95,9 +96,13 @@ func NewSubscriber(ctx context.Context, conn *Connection, options ...func(*subsc
 				if err == nil {
 					return
 				}
-				s.logger.Debugf("channel closed: %v", err)
+				s.logger.WithFields(map[string]interface{}{
+					"error": err.Error(),
+				}).Debug("channel closed")
 				if err := s.handleReconnect(context.Background()); err != nil {
-					conn.logger.Debugf("reconnect error: %v", err)
+					conn.logger.WithFields(map[string]interface{}{
+						"error": err.Error(),
+					}).Debug("reconnect error")
 				}
 			}
 		}
@@ -107,7 +112,9 @@ func NewSubscriber(ctx context.Context, conn *Connection, options ...func(*subsc
 	for _, ex := range s.exchanges {
 		err := conn.ExchangeDeclare(ctx, ex)
 		if err != nil {
-			conn.logger.Debugf("exchange declare error: %v", err)
+			conn.logger.WithFields(map[string]interface{}{
+				"error": err.Error(),
+			}).Debug("exchange declare error")
 		}
 	}
 
@@ -115,7 +122,9 @@ func NewSubscriber(ctx context.Context, conn *Connection, options ...func(*subsc
 	for i, queue := range s.queues {
 		q, err := conn.QueueDeclare(ctx, queue)
 		if err != nil {
-			conn.logger.Debugf("queue declare error: %v", err)
+			conn.logger.WithFields(map[string]interface{}{
+				"error": err.Error(),
+			}).Debug("queue declare error")
 		}
 		s.queues[i] = q
 	}
@@ -127,13 +136,17 @@ func (s *subscriber) handleReconnect(ctx context.Context) error {
 	for {
 		ch, err := s.connection.connection().Channel()
 		if err != nil {
-			s.logger.Debugf("failed to open channel: %v", err)
+			s.logger.WithFields(map[string]interface{}{
+				"error": err.Error(),
+			}).Debug("failed to open channel")
 			select {
 			case <-s.connection.done:
 				s.logger.Debug("connection is done, closing subscriber")
 				// closing self cause graceful shutdown by (*subscriber).done channel
 				if err := s.Close(); err != nil {
-					s.logger.Debugf("failed to close subscriber: %v", err)
+					s.logger.WithFields(map[string]interface{}{
+						"error": err.Error(),
+					}).Debug("failed to close subscriber")
 				}
 			case <-s.done:
 				s.logger.Debug("subscriber is done")
@@ -146,9 +159,13 @@ func (s *subscriber) handleReconnect(ctx context.Context) error {
 		}
 
 		if err := s.presetChannel(ch); err != nil {
-			s.logger.Debugf("failed to preset channel: %v", err)
+			s.logger.WithFields(map[string]interface{}{
+				"error": err.Error(),
+			}).Debug("failed to preset channel")
 			if err := ch.Close(); err != nil {
-				s.logger.Debugf("failed to close channel: %v", err)
+				s.logger.WithFields(map[string]interface{}{
+					"error": err.Error(),
+				}).Debug("failed to close channel")
 			}
 			continue
 		}
@@ -208,10 +225,14 @@ func (s *subscriber) Subscribe(ctx context.Context, queue *Queue, options ...fun
 				amqp.Table(subscription.Args), // args
 			)
 			if err != nil {
-				s.logger.Debugf("failed to start consuming: %v", err)
+				s.logger.WithFields(map[string]interface{}{
+					"error": err.Error(),
+				}).Debug("failed to start consuming")
 				select {
 				case <-ctx.Done():
-					s.logger.Debugf("canceled by context: %v", ctx.Err())
+					s.logger.WithFields(map[string]interface{}{
+						"error": ctx.Err(),
+					}).Debug("canceled by context")
 					return
 				case <-s.done:
 					s.logger.Debug("subscriber is done")
@@ -221,7 +242,9 @@ func (s *subscriber) Subscribe(ctx context.Context, queue *Queue, options ...fun
 				continue
 			}
 			if err := s.consume(ctx, msgs, ch); err != nil {
-				s.logger.Debugf("failed to consume: %v", err)
+				s.logger.WithFields(map[string]interface{}{
+					"error": err.Error(),
+				}).Debug("failed to consume")
 				return
 			}
 		}

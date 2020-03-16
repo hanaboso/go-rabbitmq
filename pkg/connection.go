@@ -1,4 +1,4 @@
-package rabbitmq
+package pkg
 
 import (
 	"context"
@@ -7,17 +7,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanaboso/go-log/pkg/null"
 	"github.com/jpillora/backoff"
 	"github.com/streadway/amqp"
+
+	log "github.com/hanaboso/go-log/pkg"
 )
 
 // ConnectionWithLogger provides connection with logger.
-func ConnectionWithLogger(log Logger, level LoggingLevel) func(*Connection) {
+func ConnectionWithLogger(log log.Logger) func(*Connection) {
 	return func(connection *Connection) {
-		connection.logger = logger{
-			Logger: log,
-			level:  level,
-		}
+		connection.logger = log
 	}
 }
 
@@ -52,7 +52,7 @@ type Connection struct {
 	conn            *amqp.Connection
 	connM           sync.RWMutex
 	done            chan bool
-	logger          logger
+	logger          log.Logger
 	notifyConnClose chan *amqp.Error
 	prefetchCount   int
 	publishDelay    *backoff.Backoff
@@ -65,7 +65,7 @@ type Connection struct {
 func Connect(ctx context.Context, dsn string, options ...func(*Connection)) (*Connection, error) {
 	conn := Connection{
 		done:           make(chan bool),
-		logger:         logger{Logger: DeafLogger()},
+		logger:         null.NewLogger(),
 		publishDelay:   defaultBackOff(),
 		subscribeDelay: defaultBackOff(),
 		reconnectDelay: defaultBackOff(),
@@ -90,9 +90,13 @@ func Connect(ctx context.Context, dsn string, options ...func(*Connection)) (*Co
 					// graceful shutdown
 					return
 				}
-				conn.logger.Debugf("connection closed: %v", err)
+				conn.logger.WithFields(map[string]interface{}{
+					"error": err.Error(),
+				}).Debug("connection closed")
 				if err := conn.handleReconnect(context.Background(), dsn); err != nil {
-					conn.logger.Debugf("reconnect error: %v", err)
+					conn.logger.WithFields(map[string]interface{}{
+						"error": err.Error(),
+					}).Debug("reconnect")
 				}
 			case <-conn.done:
 				return
@@ -145,7 +149,7 @@ func (c *Connection) ExchangeDeclare(ctx context.Context, exchange Exchange) err
 				}
 			}
 
-			c.logger.Info(err)
+			c.logger.Info(err.Error())
 
 			select {
 			case <-c.done:
@@ -208,7 +212,7 @@ func (c *Connection) QueueDeclare(ctx context.Context, queue Queue) (Queue, erro
 				}
 			}
 
-			c.logger.Info(err)
+			c.logger.Info(err.Error())
 
 			select {
 			case <-c.done:
@@ -275,7 +279,7 @@ func (c *Connection) QueueBind(ctx context.Context, queue *Queue, key, exchange 
 				}
 			}
 
-			c.logger.Debug(err)
+			c.logger.Debug(err.Error())
 
 			select {
 			case <-c.done:
@@ -319,7 +323,9 @@ func (c *Connection) handleReconnect(ctx context.Context, dsn string) error {
 				return err
 			}
 
-			c.logger.Debugf("failed to dial connection: %v", err)
+			c.logger.WithFields(map[string]interface{}{
+				"error": err.Error(),
+			}).Debug("dial connection")
 
 			select {
 			case <-c.done:
@@ -333,9 +339,13 @@ func (c *Connection) handleReconnect(ctx context.Context, dsn string) error {
 		}
 
 		if err := c.presetConnection(conn); err != nil {
-			c.logger.Debugf("failed to preset connection: %v", err)
+			c.logger.WithFields(map[string]interface{}{
+				"error": err.Error(),
+			}).Debug("preset connection")
 			if err := conn.Close(); err != nil {
-				c.logger.Debugf("failed to close connection: %v", err)
+				c.logger.WithFields(map[string]interface{}{
+					"error": err.Error(),
+				}).Debug("close connection")
 			}
 			continue
 		}

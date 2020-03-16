@@ -1,4 +1,4 @@
-package rabbitmq_test
+package pkg_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hanaboso/go-rabbitmq"
+	rabbitmq "github.com/hanaboso/go-rabbitmq/pkg"
 )
 
 func TestSubscribe(t *testing.T) {

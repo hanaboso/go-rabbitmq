@@ -1,4 +1,4 @@
-package rabbitmq_test
+package pkg_test
 
 import (
 	"os"
