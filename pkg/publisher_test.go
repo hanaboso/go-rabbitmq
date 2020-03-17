@@ -5,8 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-	"os"
+	"github.com/hanaboso/go-log/pkg/zap"
 	"testing"
 	"time"
 
@@ -27,7 +26,7 @@ func TestPublish(t *testing.T) {
 	conn, err := rabbitmq.Connect(
 		ctx,
 		DSNForTest(t),
-		rabbitmq.ConnectionWithLogger(log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags), rabbitmq.Debug),
+		rabbitmq.ConnectionWithLogger(zap.NewLogger()),
 	)
 	nilErr(t, err, "failed to connect")
 	defer func() { _ = conn.Close() }()

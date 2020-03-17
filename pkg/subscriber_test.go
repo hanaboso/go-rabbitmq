@@ -4,8 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-	"os"
+	"github.com/hanaboso/go-log/pkg/zap"
 	"testing"
 	"time"
 
@@ -23,7 +22,7 @@ func TestSubscribe(t *testing.T) {
 	conn, err := rabbitmq.Connect(
 		ctx,
 		DSNForTest(t),
-		rabbitmq.ConnectionWithLogger(createLogger(), rabbitmq.Debug),
+		rabbitmq.ConnectionWithLogger(zap.NewLogger()),
 		rabbitmq.ConnectionWithPrefetchLimit(20),
 	)
 	nilErr(t, err, "connection failed")
@@ -57,11 +56,11 @@ func TestSubscribeQueueClassic(t *testing.T) {
 	)
 
 	ctx := createCtx()
-	logger := createLogger()
+	logger := zap.NewLogger()
 	conn, err := rabbitmq.Connect(
 		ctx,
 		DSNForTest(t),
-		rabbitmq.ConnectionWithLogger(logger, rabbitmq.Debug),
+		rabbitmq.ConnectionWithLogger(logger),
 		rabbitmq.ConnectionWithPrefetchLimit(20),
 	)
 	nilErr(t, err, "connection failed")
@@ -72,7 +71,7 @@ func TestSubscribeQueueClassic(t *testing.T) {
 		ctx,
 		conn,
 		rabbitmq.SubscriberWithPrefetchLimit(1),
-		rabbitmq.SubscriberWithLogger(logger, rabbitmq.Debug),
+		rabbitmq.SubscriberWithLogger(logger),
 		rabbitmq.SubscriberAddQueue(q),
 	)
 	nilErr(t, err, "failed to create subscriber")
@@ -97,11 +96,11 @@ func TestSubscribeQueueQuorum(t *testing.T) {
 	)
 
 	ctx := createCtx()
-	logger := createLogger()
+	logger := zap.NewLogger()
 	conn, err := rabbitmq.Connect(
 		ctx,
 		DSNForTest(t),
-		rabbitmq.ConnectionWithLogger(logger, rabbitmq.Debug),
+		rabbitmq.ConnectionWithLogger(logger),
 		rabbitmq.ConnectionWithPrefetchLimit(20),
 	)
 	nilErr(t, err, "connection failed")
@@ -112,7 +111,7 @@ func TestSubscribeQueueQuorum(t *testing.T) {
 		ctx,
 		conn,
 		rabbitmq.SubscriberWithPrefetchLimit(1),
-		rabbitmq.SubscriberWithLogger(logger, rabbitmq.Debug),
+		rabbitmq.SubscriberWithLogger(logger),
 		rabbitmq.SubscriberAddQueue(q),
 	)
 	nilErr(t, err, "failed to create subscriber")
@@ -139,11 +138,11 @@ func TestSubscribeExchange(t *testing.T) {
 	)
 
 	ctx := createCtx()
-	logger := createLogger()
+	logger := zap.NewLogger()
 	conn, err := rabbitmq.Connect(
 		ctx,
 		DSNForTest(t),
-		rabbitmq.ConnectionWithLogger(logger, rabbitmq.Debug),
+		rabbitmq.ConnectionWithLogger(logger),
 		rabbitmq.ConnectionWithPrefetchLimit(20),
 	)
 	nilErr(t, err, "connection failed")
@@ -153,7 +152,7 @@ func TestSubscribeExchange(t *testing.T) {
 		ctx,
 		conn,
 		rabbitmq.SubscriberWithPrefetchLimit(10),
-		rabbitmq.SubscriberWithLogger(logger, rabbitmq.Debug),
+		rabbitmq.SubscriberWithLogger(logger),
 		rabbitmq.SubscriberAddExchange(rabbitmq.NewExchange(exchangeName, rabbitmq.ExchangeTopic, rabbitmq.ExchangeWithDurable(true))),
 	)
 	nilErr(t, err, "failed to create subscriber")
@@ -174,10 +173,6 @@ func TestSubscribeExchange(t *testing.T) {
 
 		nilErr(t, msg.Ack(), "ACK failed")
 	}
-}
-
-func createLogger() *log.Logger {
-	return log.New(os.Stdout, "[RabbitMQ]", log.LstdFlags)
 }
 
 func createCtx() context.Context {

@@ -6,5 +6,5 @@ import (
 )
 
 func DSNForTest(t *testing.T) string {
-	return os.Getenv("RABBITMQ_DSN")
+	return os.Getenv("RABBIT_DSN")
 }

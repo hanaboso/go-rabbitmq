@@ -15,16 +15,14 @@ type (
 	configType struct {
 		App *appType
 	}
-
-	logger zap.Logger
 )
 
 var (
 	// Logger logger
 	Logger log.Logger
-	app appType
+	app    appType
 
-	config = configType {
+	config = configType{
 		App: &app,
 	}
 )
