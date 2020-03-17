@@ -1,4 +1,4 @@
-package rabbitmq
+package pkg
 
 import (
 	"context"
@@ -7,16 +7,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hanaboso/go-log/pkg/null"
+	"github.com/jpillora/backoff"
 	"github.com/streadway/amqp"
+
+	log "github.com/hanaboso/go-log/pkg"
 )
 
 // ConnectionWithLogger provides connection with logger.
-func ConnectionWithLogger(log Logger, level LoggingLevel) func(*Connection) {
+func ConnectionWithLogger(log log.Logger) func(*Connection) {
 	return func(connection *Connection) {
-		connection.logger = logger{
-			Logger: log,
-			level:  level,
-		}
+		connection.logger = log
 	}
 }
 
@@ -35,28 +36,39 @@ func ConnectionWithPrefetchLimit(count int) func(*Connection) {
 	}
 }
 
-// TODO define more options
+// ConnectionWithCustomBackOff sets custom back-off interval.
+func ConnectionWithCustomBackOff(min time.Duration, max time.Duration, factor float64, jitter bool) func(*Connection) {
+	return func(connection *Connection) {
+		connection.reconnectDelay = createBackOff(min, max, factor, jitter)
+		connection.publishDelay = createBackOff(min, max, factor, jitter)
+		connection.subscribeDelay = createBackOff(min, max, factor, jitter)
+	}
+}
 
 // Connection is wrapper over (*amqp.Connection) with ability to reconnect.
 type Connection struct {
+	Config          amqp.Config
+	closeOnce       sync.Once
 	conn            *amqp.Connection
 	connM           sync.RWMutex
-	logger          logger
-	notifyConnClose chan *amqp.Error
-	reconnectDelay  time.Duration
 	done            chan bool
-	closeOnce       sync.Once
-	Config          amqp.Config
+	logger          log.Logger
+	notifyConnClose chan *amqp.Error
 	prefetchCount   int
+	publishDelay    *backoff.Backoff
+	reconnectDelay  *backoff.Backoff
+	subscribeDelay  *backoff.Backoff
 }
 
 // Connect connects to provided DSN with context and returns Connection with started reconnect goroutine.
 // Connection reconnect doesn't rely on context.
 func Connect(ctx context.Context, dsn string, options ...func(*Connection)) (*Connection, error) {
 	conn := Connection{
-		logger:         logger{Logger: DeafLogger()},
 		done:           make(chan bool),
-		reconnectDelay: 5 * time.Second,
+		logger:         null.NewLogger(),
+		publishDelay:   defaultBackOff(),
+		subscribeDelay: defaultBackOff(),
+		reconnectDelay: defaultBackOff(),
 		Config: amqp.Config{
 			Heartbeat: 10 * time.Second, // amqp.defaultHeartbeat
 			Locale:    "en_US",          // amqp.defaultLocale
@@ -78,9 +90,13 @@ func Connect(ctx context.Context, dsn string, options ...func(*Connection)) (*Co
 					// graceful shutdown
 					return
 				}
-				conn.logger.Debugf("connection closed: %v", err)
+				conn.logger.WithFields(map[string]interface{}{
+					"error": err.Error(),
+				}).Debug("connection closed")
 				if err := conn.handleReconnect(context.Background(), dsn); err != nil {
-					conn.logger.Debugf("reconnect error: %v", err)
+					conn.logger.WithFields(map[string]interface{}{
+						"error": err.Error(),
+					}).Debug("reconnect")
 				}
 			case <-conn.done:
 				return
@@ -91,7 +107,7 @@ func Connect(ctx context.Context, dsn string, options ...func(*Connection)) (*Co
 	return &conn, nil
 }
 
-// Close closes connection
+// Close closes connection.
 func (c *Connection) Close() error {
 	c.closeOnce.Do(func() {
 		close(c.done)
@@ -106,8 +122,8 @@ func (c *Connection) Close() error {
 	return c.conn.Close()
 }
 
-// ExchangeDeclare declares exchange with context
-func (c *Connection) ExchangeDeclare(ctx context.Context, name string, kind ExchangeType, options ...func(*Exchange)) error {
+// NewExchange returns new exchange.
+func NewExchange(name string, kind ExchangeType, options ...func(exchange *Exchange)) Exchange {
 	exchange := Exchange{
 		Name: name,
 		Type: kind,
@@ -116,6 +132,11 @@ func (c *Connection) ExchangeDeclare(ctx context.Context, name string, kind Exch
 		option(&exchange)
 	}
 
+	return exchange
+}
+
+// ExchangeDeclare declares exchange with context.
+func (c *Connection) ExchangeDeclare(ctx context.Context, exchange Exchange) error {
 	for {
 		if err := c.exchangeDeclare(exchange); err != nil {
 			var aErr *amqp.Error
@@ -128,17 +149,19 @@ func (c *Connection) ExchangeDeclare(ctx context.Context, name string, kind Exch
 				}
 			}
 
-			c.logger.Info(err)
+			c.logger.Info(err.Error())
 
 			select {
 			case <-c.done:
 				return errors.New("connection is done")
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(c.reconnectDelay):
+			case <-time.After(c.reconnectDelay.Duration()):
 			}
 			continue
 		}
+
+		c.reconnectDelay.Reset()
 		return nil
 	}
 }
@@ -148,7 +171,7 @@ func (c *Connection) exchangeDeclare(exchange Exchange) error {
 	if err != nil {
 		return err
 	}
-	defer ch.Close()
+	defer func() { _ = ch.Close() }()
 
 	return ch.ExchangeDeclare(
 		exchange.Name,             // name
@@ -161,15 +184,21 @@ func (c *Connection) exchangeDeclare(exchange Exchange) error {
 	)
 }
 
-// QueueDeclare declares queue with context
-func (c *Connection) QueueDeclare(ctx context.Context, name string, options ...func(*Queue)) (Queue, error) {
+// NewQueue returns new Queue.
+func NewQueue(name string, options ...func(*Queue)) Queue {
 	queue := Queue{
 		Name: name,
+		Args: Arguments{},
 	}
 	for _, option := range options {
 		option(&queue)
 	}
 
+	return queue
+}
+
+// QueueDeclare declares queue with context.
+func (c *Connection) QueueDeclare(ctx context.Context, queue Queue) (Queue, error) {
 	for {
 		q, err := c.queueDeclare(queue)
 		if err != nil {
@@ -183,17 +212,19 @@ func (c *Connection) QueueDeclare(ctx context.Context, name string, options ...f
 				}
 			}
 
-			c.logger.Info(err)
+			c.logger.Info(err.Error())
 
 			select {
 			case <-c.done:
 				return Queue{}, errors.New("connection is done")
 			case <-ctx.Done():
 				return Queue{}, ctx.Err()
-			case <-time.After(c.reconnectDelay):
+			case <-time.After(c.reconnectDelay.Duration()):
 			}
 			continue
 		}
+		c.reconnectDelay.Reset()
+
 		return q, nil
 	}
 }
@@ -203,7 +234,7 @@ func (c *Connection) queueDeclare(queue Queue) (Queue, error) {
 	if err != nil {
 		return Queue{}, err
 	}
-	defer ch.Close()
+	defer func() { _ = ch.Close() }()
 
 	q, err := ch.QueueDeclare(
 		queue.Name,             // name
@@ -248,20 +279,21 @@ func (c *Connection) QueueBind(ctx context.Context, queue *Queue, key, exchange 
 				}
 			}
 
-			c.logger.Debug(err)
+			c.logger.Debug(err.Error())
 
 			select {
 			case <-c.done:
 				return errors.New("connection is done")
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(c.reconnectDelay):
+			case <-time.After(c.reconnectDelay.Duration()):
 			}
 			continue
 		}
 		break
 	}
 
+	c.reconnectDelay.Reset()
 	queue.bindings = append(queue.bindings, binding)
 	return nil
 }
@@ -271,7 +303,7 @@ func (c *Connection) queueBind(binding Binding) error {
 	if err != nil {
 		return err
 	}
-	defer ch.Close()
+	defer func() { _ = ch.Close() }()
 
 	return ch.QueueBind(
 		binding.Name,       // queue name
@@ -291,28 +323,35 @@ func (c *Connection) handleReconnect(ctx context.Context, dsn string) error {
 				return err
 			}
 
-			c.logger.Debugf("failed to dial connection: %v", err)
+			c.logger.WithFields(map[string]interface{}{
+				"error": err.Error(),
+			}).Debug("dial connection")
 
 			select {
 			case <-c.done:
 				return fmt.Errorf("connection is closed")
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(c.reconnectDelay):
+			case <-time.After(c.reconnectDelay.Duration()):
 				c.logger.Debug("connection reconnect")
 				continue
 			}
 		}
 
 		if err := c.presetConnection(conn); err != nil {
-			c.logger.Debugf("failed to preset connection: %v", err)
+			c.logger.WithFields(map[string]interface{}{
+				"error": err.Error(),
+			}).Debug("preset connection")
 			if err := conn.Close(); err != nil {
-				c.logger.Debugf("failed to close connection: %v", err)
+				c.logger.WithFields(map[string]interface{}{
+					"error": err.Error(),
+				}).Debug("close connection")
 			}
 			continue
 		}
 
 		c.changeConnection(conn)
+		c.reconnectDelay.Reset()
 		return nil
 	}
 }
@@ -322,7 +361,7 @@ func (c *Connection) presetConnection(conn *amqp.Connection) error {
 	if err != nil {
 		return fmt.Errorf("failed to open channel: %v", err)
 	}
-	defer ch.Close()
+	defer func() { _ = ch.Close() }()
 
 	if c.prefetchCount > 0 {
 		if err := ch.Qos(c.prefetchCount, 0, true); err != nil {
