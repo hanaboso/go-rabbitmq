@@ -1,5 +1,4 @@
 stages:
-    - build
     - test
     - mirror
     - cleanup
@@ -7,14 +6,6 @@ stages:
 before_script:
     - eval $(ssh-agent)
     - ssh-add ~/.ssh/bob_the_builder_hanaboso
-
-build:
-    stage: build
-    script:
-        - make build TAG=${CI_BUILD_REF_NAME}
-    only:
-        - dev
-        - master
 
 test:
     stage: test
