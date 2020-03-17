@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/hanaboso/go-log/pkg/zap"
-	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
 
@@ -55,8 +54,6 @@ func TestSubscribeQueueClassic(t *testing.T) {
 	const (
 		queueName = "subscribe-test-classic" // empty for random name
 	)
-
-	require.Equal(t, "asd", DSNForTest(t))
 
 	ctx := createCtx()
 	logger := zap.NewLogger()
