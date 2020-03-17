@@ -5,10 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-
 	"github.com/hanaboso/go-log/pkg/zap"
-
 	rabbitmq "github.com/hanaboso/go-rabbitmq/pkg"
+	"github.com/streadway/amqp"
+	"time"
 )
 
 func ExamplePublisher_Publish() {
@@ -18,12 +18,18 @@ func ExamplePublisher_Publish() {
 	const dataSourceName = "amqp://guest:guest@localhost:5672/"
 	conn, err := rabbitmq.Connect(ctx, dataSourceName,
 		rabbitmq.ConnectionWithLogger(zap.NewLogger()),
+		rabbitmq.ConnectionWithConfig(amqp.Config{}),
+		rabbitmq.ConnectionWithCustomBackOff(time.Millisecond, time.Second, 1, true),
 	)
 	if err != nil {
 		fmt.Printf("connection failed: %v", err)
 		return
 	}
-	defer func() { _ = conn.Close() }()
+	await := make(chan struct{})
+	defer func() {
+		_ = conn.Close()
+		await <- struct{}{}
+	}()
 
 	pub, err := rabbitmq.NewPublisher(ctx, conn)
 	if err != nil {
@@ -48,6 +54,8 @@ func ExamplePublisher_Publish() {
 		fmt.Printf("failed to publish: %v", err)
 		return
 	}
+
+	<-await
 }
 
 func ExampleSubscriber_Subscribe() {
