@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hanaboso/go-log/pkg/null"
+	"github.com/hanaboso/go-log/pkg/zap"
 	"github.com/jpillora/backoff"
 	"github.com/streadway/amqp"
 
@@ -65,7 +65,7 @@ type Connection struct {
 func Connect(ctx context.Context, dsn string, options ...func(*Connection)) (*Connection, error) {
 	conn := Connection{
 		done:           make(chan bool),
-		logger:         null.NewLogger(),
+		logger:         zap.NewLogger(),
 		publishDelay:   defaultBackOff(),
 		subscribeDelay: defaultBackOff(),
 		reconnectDelay: defaultBackOff(),
