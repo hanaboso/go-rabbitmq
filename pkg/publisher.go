@@ -212,11 +212,21 @@ func (p *publisher) Publish(ctx context.Context, exchange, key string, data []by
 					p.connection.publishDelay.Reset()
 					return nil
 				}
-			case <-time.After(p.connection.publishDelay.Duration()):
-			}
-			p.logger.Debug("Push didn't confirm. Retrying...")
-		}
 
+				p.logger.Debug("publish confirm not acked")
+
+				return errors.New("publish confirm not acked")
+			case <-p.done:
+				p.logger.Debug("publisher is done")
+				return fmt.Errorf("publisher is done")
+			case <-ctx.Done():
+				p.logger.Debug("publish canceled by context")
+				return ctx.Err()
+			case <-time.After(p.connection.publishDelay.Duration()):
+				p.logger.Debug("publish delay exceeded")
+				return fmt.Errorf("publish delay exceeded")
+			}
+		}
 		return nil
 	}
 }
