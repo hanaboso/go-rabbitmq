@@ -153,6 +153,20 @@ func PublishingWithDeliveryMode(deliveryMode DeliveryMode) func(*Publishing) {
 	}
 }
 
+// PublishingWithAppID provides publishing with appId
+func PublishingWithAppID(appID string) func(*Publishing) {
+	return func(publishing *Publishing) {
+		publishing.AppID = appID
+	}
+}
+
+// PublishingWithType provides publishing with type
+func PublishingWithType(pubType string) func(*Publishing) {
+	return func(publishing *Publishing) {
+		publishing.Type = pubType
+	}
+}
+
 // Subscription contains all parameters for (*amqp.Channel).Consume method.
 type Subscription struct {
 	Queue     string
