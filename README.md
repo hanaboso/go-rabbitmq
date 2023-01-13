@@ -1,57 +1,64 @@
-# Rabbit MQ
-
-## github.com/hanaboso/go-rabbitmq
-
-Auto-reconnecting RabbitMQ client library build on top of [github.com/streadway/amqp](https://github.com/streadway/amqp)
-
-## Usage
 ```
-import rabbitmq "github.com/hanaboso/go-rabbitmq/pkg"
+package main
 
-conn, err := rabbitmq.Connect(ctx, dataSourceName,
-    rabbitmq.ConnectionWithLogger(logger),
-    rabbitmq.ConnectionWithConfig(amqp.Config{}),
-    rabbitmq.ConnectionWithCustomBackOff(),
+import (
+	"github.com/hanaboso/go-log/pkg/zap"
+	"github.com/hanaboso/go-rabbitmq/pkg/rabbitmq"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-// Publisher
-pub, err := rabbitmq.NewPublisher(ctx, conn)
-defer func() { _ = pub.Close() }()
+func main() {
+	logger := zap.NewLogger()
+	client := rabbitmq.NewClient("amqp://rabbitmq", logger, true)
+	// 3rd param "singleConnection" decides whether or library should create separate connection/channels for
+	// publishers and consumers for high load traffic
 
-err := pub.Publish(ctx, "exchange", "routing.key", buff.Bytes(),
-    rabbitmq.PublishingWithDeliveryMode(rabbitmq.Persistent),
-)
+	queue := rabbitmq.Queue{
+		Name:    "test",
+		Options: rabbitmq.DefaultQueueOptions,
+	}
+	exchange := rabbitmq.Exchange{
+		Name: "asd",
+		Kind: "direct",
+		Bindings: []rabbitmq.BindOptions{
+			{
+				Queue:  "test",
+				Key:    "",
+				NoWait: false,
+				Args:   nil,
+			},
+		},
+	}
+	// Register all used queses & exchanges otherwise publisher/consumer cannot recover when queues are deleted
+	// Consumer also needs to know queue specification in order to connect - just register all used
+	client.AddExchange(exchange)
+	client.AddQueue(queue)
 
-// Subscriber
-sub, err := rabbitmq.NewSubscriber(ctx, conn)
-defer func() { _ = sub.Close() }()
+	// Ensures that all Queues & Exchanges are created and valid
+	_ = client.InitializeQueuesExchanges()
 
-q, err := conn.QueueDeclare(ctx, rabbitmq.NewQueue("routing.key", rabbitmq.QueueWithDurability(true)))
+	publisher := client.NewPublisher("asd", "")
+	_ = publisher.Publish(amqp.Publishing{})
 
-msgs, err := sub.Subscribe(ctx, &q)
+	consumer := client.NewConsumer("test", 10)
+
+	// Callback consumer
+	type MessageContent struct {
+		Losos string `json:"losos"`
+	}
+
+	callback := func(content *MessageContent, headers map[string]interface{}) rabbitmq.Acked {
+		// Do what ever you need with a message
+		return rabbitmq.Ack
+	}
+
+	coonsumer := rabbitmq.JsonConsumer[MessageContent]{consumer}
+	go coonsumer.Consume(callback)
+
+	// Manual/Auto Ack consumer
+	for msg := range consumer.Consume(false) {
+		// For "autoAck: false" consumer make sure to call Ack manually
+		_ = msg.Ack(true)
+	}
+}
 ```
-
-More detailed examples can be found in `/pkg/example_test.go`
-
-## Configuration
-- RABBIT_DSN
-    - Required
-    - RabbitMq DSN
-    - Example: `amqp://guest:guest@rabbitmq:5672/`
-
-- APP_DEBUG
-    - Optional (default `false`)
-    - Controls logger level
-    - Example: `true` | `false`
-
-## Development
-- `make init-dev` - Runs `docker-compose.yml`
-- `make test` - Runs tests
-- `http://127.0.0.22:15672` - RabbitMq
-
-## Technologies
-- Go 1.13+
-
-## Dependencies
-- RabbitMq
-- GoLogger `github.com/hanaboso/go-log`

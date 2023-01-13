@@ -8,7 +8,6 @@ DE=docker-compose exec -T app
 		-e 's|{DOCKER_SOCKET_PATH}|$(shell test -S /var/run/docker-$${USER}.sock && echo /var/run/docker-$${USER}.sock || echo /var/run/docker.sock)|g' \
 		.env.dist >> .env; \
 
-
 docker-up-force: .env
 	$(DC) pull
 	$(DC) up -d --force-recreate --remove-orphans
@@ -26,15 +25,12 @@ go-update:
 
 init-dev: docker-up-force wait-for-server-start
 	$(DE) go mod download
-
-lint:
-	$(DE) gofmt -w .
-	$(DE) golint ./...
+	sleep 10
 
 wait-for-server-start:
 	$(DE) /bin/sh -c 'while [ $$(curl -s -o /dev/null -w "%{http_code}" http://guest:guest@rabbitmq:15672/api/overview) == 000 ]; do sleep 1; done'
 
-fast-test: lint
+fast-test:
 	$(DE) mkdir var || true
 	$(DE) go test -cover -coverprofile var/coverage.out ./... -count=1
 	$(DE) go tool cover -html=var/coverage.out -o var/coverage.html
