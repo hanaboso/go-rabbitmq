@@ -163,6 +163,7 @@ func (this *Consumer) connect(autoAck bool) <-chan amqp.Delivery {
 
 	if !connector.open || connection == nil || connection.IsClosed() || channel == nil || channel.IsClosed() {
 		this.log(logger).Debug("connection closed / not opened")
+		return nil
 	}
 
 	queue, ok := client.queues[this.queue]
