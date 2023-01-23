@@ -2,7 +2,7 @@ version: '3.5'
 
 services:
   app:
-    image: dkr.hanaboso.net/hanaboso/go-base:1.13
+    image: dkr.hanaboso.net/hanaboso/go-base:1.19
     user: ${DEV_UID}:${DEV_GID}
     volumes:
       - ./:/app
@@ -11,9 +11,10 @@ services:
     environment:
       DEV_UID: ${DEV_UID}
       DEV_GID: ${DEV_GID}
-      RABBIT_DSN: amqp://guest:guest@rabbitmq:5672/
+      RABBITMQ_DSN: amqp://guest:guest@rabbitmq:5672/
 
   rabbitmq:
     image: rabbitmq:management-alpine
     ports:
       - ${DEV_IP}:15672:15672
+      - ${DEV_IP}:5672:5672
