@@ -3,6 +3,7 @@ package rabbitmq
 import (
 	"fmt"
 	log "github.com/hanaboso/go-log/pkg"
+	"github.com/hanaboso/go-utils/pkg/arrayx"
 	"github.com/hanaboso/go-utils/pkg/intx"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"sync"
@@ -64,6 +65,15 @@ func (this *connection) awaitConnection() {
 			return
 		}
 		<-time.After(100 * time.Millisecond)
+	}
+}
+
+func (this *connection) removeChannel(id int) {
+	for index, channel := range this.channels {
+		if id == channel.id {
+			this.channels = arrayx.RemoveAt(this.channels, index)
+			return
+		}
 	}
 }
 

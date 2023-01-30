@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/hanaboso/go-log v0.0.0-20200316105142-2513eeb2ee4e
-	github.com/hanaboso/go-utils v0.0.0-20230117132444-eb28ee30f42b
+	github.com/hanaboso/go-utils v0.0.0-20230130091007-6f3dd0f98846
 	github.com/rabbitmq/amqp091-go v1.5.0
 	github.com/stretchr/testify v1.7.0
 )

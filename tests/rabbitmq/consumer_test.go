@@ -35,6 +35,13 @@ func testRecreateQueue(t *testing.T) {
 	checkConsumer(t)
 }
 
+func TestCloseConsumer(t *testing.T) {
+	prepareConsumer()
+	client.AwaitConnect()
+	consumer.Close()
+	<-consumerMessages
+}
+
 func checkConsumer(t *testing.T) {
 	err := consumerPublish.Publish(amqp.Publishing{})
 	assert.Equal(t, nil, err)

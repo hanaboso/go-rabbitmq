@@ -35,14 +35,14 @@ type StringConsumer struct {
 }
 
 /*
-	Due to Go's dumb limitations there's a HUGE copy-paste of String/Json consumers
-	only message Body is handled differently so update fix both
+	Due to Go's dumb limitations there's a HUGE copy-paste of Regular/String/Json consumers
+	only message Body is handled differently so update/fix all
 */
 
 func (this *StringConsumer) Consume(callback StringConsumerCallback) {
 	connector := this.channel.connection
 	logger := connector.logger
-	for connector.open {
+	for this.channel.open && connector.open {
 		input := this.connect(false)
 		if input == nil {
 			time.Sleep(time.Second)
@@ -81,7 +81,7 @@ func (this *StringConsumer) Consume(callback StringConsumerCallback) {
 func (this *JsonConsumer[T]) Consume(callback JsonConsumerCallback[T]) {
 	connector := this.channel.connection
 	logger := connector.logger
-	for connector.open {
+	for this.channel.open && connector.open {
 		input := this.connect(false)
 		if input == nil {
 			time.Sleep(time.Second)
@@ -128,7 +128,7 @@ func (this *Consumer) Consume(autoAck bool) <-chan amqp.Delivery {
 
 	go func() {
 		connector := this.channel.connection
-		for connector.open {
+		for this.channel.open && connector.open {
 			input := this.connect(autoAck)
 			if input == nil {
 				time.Sleep(time.Second)
@@ -208,6 +208,10 @@ func (this *Consumer) connect(autoAck bool) <-chan amqp.Delivery {
 
 	cancel()
 	return delivery
+}
+
+func (this *Consumer) Close() {
+	this.channel.close()
 }
 
 func (this *Consumer) log(log log.Logger) log.Logger {

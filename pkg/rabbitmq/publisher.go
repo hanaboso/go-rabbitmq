@@ -29,7 +29,7 @@ func (this *Publisher) PublishExchangeRoutingKey(message amqp.Publishing, exchan
 	var err error
 	var channel = this.channel
 	var connector = channel.connection
-	if !connector.open {
+	if !connector.open || !channel.open {
 		return errors.New("published closed")
 	}
 
@@ -129,6 +129,10 @@ func (this *Publisher) refreshExchange() error {
 	}
 
 	return nil
+}
+
+func (this *Publisher) Close() {
+	this.channel.close()
 }
 
 func (this *Publisher) log(log log.Logger) log.Logger {
