@@ -111,6 +111,7 @@ Without registering Exchange object into Client publisher can't re-create it sho
 func (this *Client) NewPublisherOpt(exchange string, routingKey string, options PublisherOptions) *Publisher {
 	channel := newChannel(this.getPublisherConnection())
 	go channel.connect()
+	channel.awaitConnection()
 
 	return &Publisher{
 		channel:       channel,
@@ -129,6 +130,7 @@ Uses default options
 func (this *Client) NewConsumer(queue string, prefetch int) *Consumer {
 	channel := newChannel(this.getConsumerConnection())
 	go channel.connect()
+	channel.awaitConnection()
 
 	return &Consumer{
 		channel:  channel,
