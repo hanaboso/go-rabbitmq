@@ -33,6 +33,10 @@ func testRecreateExchange(t *testing.T) {
 	checkPublisher(t)
 }
 
+func TestClosePublisher(t *testing.T) {
+	preparePublisher()
+}
+
 func checkPublisher(t *testing.T) {
 	err := publisher.Publish(amqp.Publishing{})
 	assert.Equal(t, nil, err)

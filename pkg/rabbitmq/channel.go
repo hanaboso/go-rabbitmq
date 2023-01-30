@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/hanaboso/go-utils/pkg/intx"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"sync"
 	"time"
 )
 
@@ -13,6 +14,8 @@ type channel struct {
 	confirm     chan amqp.Confirmation
 	deliveryTag uint64
 	refreshed   chan struct{}
+	open        bool
+	id          int
 }
 
 func (this *channel) connect() {
@@ -20,7 +23,7 @@ func (this *channel) connect() {
 	var channelCheck chan *amqp.Error
 	var channelCancelCheck chan string
 
-	for this.connection.open {
+	for this.open && this.connection.open {
 		close(this.refreshed)
 		this.refreshed = make(chan struct{})
 		connection := this.connection.connection
@@ -63,6 +66,12 @@ func (this *channel) connect() {
 	}
 }
 
+func (this *channel) close() {
+	this.open = false
+	_ = this.channel.Close()
+	this.connection.removeChannel(this.id)
+}
+
 func (this *channel) awaitConnection() {
 	for {
 		if this.channel != nil && !this.channel.IsClosed() {
@@ -72,9 +81,22 @@ func (this *channel) awaitConnection() {
 	}
 }
 
+var (
+	// Unique identifier of channels
+	channelId = 0
+	mutex     = &sync.Mutex{}
+)
+
 func newChannel(connection *connection) *channel {
+	mutex.Lock()
+	currentId := channelId
+	channelId += 1
+	mutex.Unlock()
+
 	return &channel{
 		connection: connection,
 		refreshed:  make(chan struct{}),
+		id:         currentId,
+		open:       true,
 	}
 }
