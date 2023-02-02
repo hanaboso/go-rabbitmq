@@ -136,6 +136,9 @@ func (this *Client) NewConsumer(queue string, prefetch int) *Consumer {
 		channel:  channel,
 		queue:    queue,
 		prefetch: prefetch,
+		wg:       &sync.WaitGroup{},
+		toClose:  make(chan struct{}),
+		open:     true,
 	}
 }
 
