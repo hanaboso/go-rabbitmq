@@ -6,6 +6,7 @@ import (
 	log "github.com/hanaboso/go-log/pkg"
 	"github.com/hanaboso/go-utils/pkg/jsonx"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"sync"
 	"time"
 )
 
@@ -13,6 +14,9 @@ type Consumer struct {
 	channel  *channel
 	queue    string
 	prefetch int
+	wg       *sync.WaitGroup
+	toClose  chan struct{}
+	open     bool
 }
 
 type JsonConsumerCallback[T any] func(content *T, headers map[string]interface{}) Acked
@@ -42,7 +46,7 @@ type StringConsumer struct {
 func (this *StringConsumer) Consume(callback StringConsumerCallback) {
 	connector := this.channel.connection
 	logger := connector.logger
-	for this.channel.open && connector.open {
+	for this.channel.open && connector.open && this.open {
 		input := this.connect(false)
 		if input == nil {
 			time.Sleep(time.Second)
@@ -52,8 +56,13 @@ func (this *StringConsumer) Consume(callback StringConsumerCallback) {
 		consume := true
 		for consume {
 			select {
+			case <-this.toClose:
+				consume = false
+			case <-this.channel.refreshed:
+				consume = false
 			case message, ok := <-input:
 				if ok {
+					this.wg.Add(1)
 					switch callback(string(message.Body), message.Headers) {
 					case Ack:
 						if err := message.Ack(true); err != nil {
@@ -70,6 +79,7 @@ func (this *StringConsumer) Consume(callback StringConsumerCallback) {
 					default:
 						this.log(logger).Fatal(fmt.Errorf("invalid consumer callback result"))
 					}
+					this.wg.Done()
 				} else {
 					consume = false
 				}
@@ -81,7 +91,7 @@ func (this *StringConsumer) Consume(callback StringConsumerCallback) {
 func (this *JsonConsumer[T]) Consume(callback JsonConsumerCallback[T]) {
 	connector := this.channel.connection
 	logger := connector.logger
-	for this.channel.open && connector.open {
+	for this.channel.open && connector.open && this.open {
 		input := this.connect(false)
 		if input == nil {
 			time.Sleep(time.Second)
@@ -91,10 +101,13 @@ func (this *JsonConsumer[T]) Consume(callback JsonConsumerCallback[T]) {
 		consume := true
 		for consume {
 			select {
+			case <-this.toClose:
+				consume = false
 			case <-this.channel.refreshed:
 				consume = false
 			case message, ok := <-input:
 				if ok {
+					this.wg.Add(1)
 					content, err := jsonx.UnmarshalBytes[T](message.Body)
 					if err != nil {
 						this.log(logger).Fatal(fmt.Errorf("cannot parse rabbitMq message: %v", err))
@@ -115,6 +128,7 @@ func (this *JsonConsumer[T]) Consume(callback JsonConsumerCallback[T]) {
 					default:
 						this.log(logger).Fatal(fmt.Errorf("invalid consumer callback result"))
 					}
+					this.wg.Done()
 				} else {
 					consume = false
 				}
@@ -128,7 +142,7 @@ func (this *Consumer) Consume(autoAck bool) <-chan amqp.Delivery {
 
 	go func() {
 		connector := this.channel.connection
-		for this.channel.open && connector.open {
+		for this.channel.open && connector.open && this.open {
 			input := this.connect(autoAck)
 			if input == nil {
 				time.Sleep(time.Second)
@@ -138,9 +152,13 @@ func (this *Consumer) Consume(autoAck bool) <-chan amqp.Delivery {
 			consume := true
 			for consume {
 				select {
+				case <-this.toClose:
+					consume = false
 				case message, ok := <-input:
 					if ok {
+						this.wg.Add(1)
 						output <- message
+						this.wg.Done()
 					} else {
 						consume = false
 					}
@@ -211,6 +229,9 @@ func (this *Consumer) connect(autoAck bool) <-chan amqp.Delivery {
 }
 
 func (this *Consumer) Close() {
+	this.open = false   // Stops consumer restarts
+	close(this.toClose) // Stops consuming
+	this.wg.Wait()      // Awaits for messages ack/nack
 	this.channel.close()
 }
 

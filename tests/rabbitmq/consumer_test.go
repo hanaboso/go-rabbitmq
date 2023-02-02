@@ -5,6 +5,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"time"
 )
 
 const consumer_key = "consumer-test"
@@ -15,6 +16,43 @@ var (
 	consumerPublish  *rabbitmq.Publisher
 	queue            rabbitmq.Queue
 )
+
+func TestCloseConsumer(t *testing.T) {
+	prepareConsumer()
+	client.AwaitConnect()
+	consumer.Close()
+	<-consumerMessages
+}
+
+func TestDelayedConsumerClose(t *testing.T) {
+	consumerKey := "kjdfkjdfhglkjdfs"
+	queue = rabbitmq.Queue{
+		Name:    consumerKey,
+		Options: rabbitmq.DefaultQueueOptions,
+	}
+
+	client.AddQueue(queue)
+
+	baseConsumer := client.NewConsumer(consumerKey, 10)
+	strConsumer := rabbitmq.StringConsumer{Consumer: baseConsumer}
+
+	processed := make(chan struct{})
+	// Ack message after time delay to ensure that Close() is waiting for it to finish
+	strCallback := func(content string, headers map[string]interface{}) rabbitmq.Acked {
+		time.Sleep(300 * time.Millisecond)
+		close(processed)
+		return rabbitmq.Ack
+	}
+
+	go strConsumer.Consume(strCallback)
+	asd := client.NewPublisherOpt("", consumerKey, rabbitmq.PublisherOptions{RetryAttempts: 5})
+	err := asd.Publish(amqp.Publishing{Body: []byte("{}")})
+	assert.Equal(t, nil, err)
+
+	strConsumer.Close()
+
+	<-processed
+}
 
 func TestConsumer(t *testing.T) {
 	t.Skip("")
@@ -33,13 +71,6 @@ func testRecreateQueue(t *testing.T) {
 	checkConsumer(t)
 	assert.Equal(t, nil, client.DeleteQueue(queue))
 	checkConsumer(t)
-}
-
-func TestCloseConsumer(t *testing.T) {
-	prepareConsumer()
-	client.AwaitConnect()
-	consumer.Close()
-	<-consumerMessages
 }
 
 func checkConsumer(t *testing.T) {
