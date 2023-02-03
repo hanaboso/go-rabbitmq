@@ -31,11 +31,11 @@ const (
 )
 
 type JsonConsumer[T any] struct {
-	*Consumer
+	Consumer *Consumer
 }
 
 type StringConsumer struct {
-	*Consumer
+	Consumer *Consumer
 }
 
 /*
@@ -43,7 +43,8 @@ type StringConsumer struct {
 	only message Body is handled differently so update/fix all
 */
 
-func (this *StringConsumer) Consume(callback StringConsumerCallback) {
+func (thisBase *StringConsumer) Consume(callback StringConsumerCallback) {
+	this := thisBase.Consumer
 	connector := this.channel.connection
 	logger := connector.logger
 	for this.channel.open && connector.open && this.open {
@@ -88,7 +89,8 @@ func (this *StringConsumer) Consume(callback StringConsumerCallback) {
 	}
 }
 
-func (this *JsonConsumer[T]) Consume(callback JsonConsumerCallback[T]) {
+func (thisBase *JsonConsumer[T]) Consume(callback JsonConsumerCallback[T]) {
+	this := thisBase.Consumer
 	connector := this.channel.connection
 	logger := connector.logger
 	for this.channel.open && connector.open && this.open {
@@ -233,6 +235,14 @@ func (this *Consumer) Close() {
 	close(this.toClose) // Stops consuming
 	this.wg.Wait()      // Awaits for messages ack/nack
 	this.channel.close()
+}
+
+func (this *StringConsumer) Close() {
+	this.Consumer.Close()
+}
+
+func (this *JsonConsumer[T]) Close() {
+	this.Consumer.Close()
 }
 
 func (this *Consumer) log(log log.Logger) log.Logger {
