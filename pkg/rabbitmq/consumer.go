@@ -43,12 +43,11 @@ type StringConsumer struct {
 	only message Body is handled differently so update/fix all
 */
 
-func (thisBase *StringConsumer) Consume(callback StringConsumerCallback) {
-	this := thisBase.Consumer
-	connector := this.channel.connection
+func (this *StringConsumer) Consume(callback StringConsumerCallback) {
+	connector := this.Consumer.channel.connection
 	logger := connector.logger
-	for this.channel.open && connector.open && this.open {
-		input := this.connect(false)
+	for this.Consumer.channel.open && connector.open && this.Consumer.open {
+		input := this.Consumer.connect(false)
 		if input == nil {
 			time.Sleep(time.Second)
 			continue
@@ -57,30 +56,30 @@ func (thisBase *StringConsumer) Consume(callback StringConsumerCallback) {
 		consume := true
 		for consume {
 			select {
-			case <-this.toClose:
+			case <-this.Consumer.toClose:
 				consume = false
-			case <-this.channel.refreshed:
+			case <-this.Consumer.channel.refreshed:
 				consume = false
 			case message, ok := <-input:
 				if ok {
-					this.wg.Add(1)
+					this.Consumer.wg.Add(1)
 					switch callback(string(message.Body), message.Headers) {
 					case Ack:
 						if err := message.Ack(true); err != nil {
-							this.log(logger).Error(fmt.Errorf("reject rabbitMq message: %v", err))
+							this.Consumer.log(logger).Error(fmt.Errorf("reject rabbitMq message: %v", err))
 						}
 					case Nack:
 						if err := message.Nack(true, true); err != nil {
-							this.log(logger).Error(fmt.Errorf("reject rabbitMq message: %v", err))
+							this.Consumer.log(logger).Error(fmt.Errorf("reject rabbitMq message: %v", err))
 						}
 					case Reject:
 						if err := message.Reject(true); err != nil {
-							this.log(logger).Error(fmt.Errorf("reject rabbitMq message: %v", err))
+							this.Consumer.log(logger).Error(fmt.Errorf("reject rabbitMq message: %v", err))
 						}
 					default:
-						this.log(logger).Fatal(fmt.Errorf("invalid consumer callback result"))
+						this.Consumer.log(logger).Fatal(fmt.Errorf("invalid consumer callback result"))
 					}
-					this.wg.Done()
+					this.Consumer.wg.Done()
 				} else {
 					consume = false
 				}
@@ -89,12 +88,11 @@ func (thisBase *StringConsumer) Consume(callback StringConsumerCallback) {
 	}
 }
 
-func (thisBase *JsonConsumer[T]) Consume(callback JsonConsumerCallback[T]) {
-	this := thisBase.Consumer
-	connector := this.channel.connection
+func (this *JsonConsumer[T]) Consume(callback JsonConsumerCallback[T]) {
+	connector := this.Consumer.channel.connection
 	logger := connector.logger
-	for this.channel.open && connector.open && this.open {
-		input := this.connect(false)
+	for this.Consumer.channel.open && connector.open && this.Consumer.open {
+		input := this.Consumer.connect(false)
 		if input == nil {
 			time.Sleep(time.Second)
 			continue
@@ -103,34 +101,34 @@ func (thisBase *JsonConsumer[T]) Consume(callback JsonConsumerCallback[T]) {
 		consume := true
 		for consume {
 			select {
-			case <-this.toClose:
+			case <-this.Consumer.toClose:
 				consume = false
-			case <-this.channel.refreshed:
+			case <-this.Consumer.channel.refreshed:
 				consume = false
 			case message, ok := <-input:
 				if ok {
-					this.wg.Add(1)
+					this.Consumer.wg.Add(1)
 					content, err := jsonx.UnmarshalBytes[T](message.Body)
 					if err != nil {
-						this.log(logger).Fatal(fmt.Errorf("cannot parse rabbitMq message: %v", err))
+						this.Consumer.log(logger).Fatal(fmt.Errorf("cannot parse rabbitMq message: %v", err))
 					}
 					switch callback(content, message.Headers) {
 					case Ack:
 						if err := message.Ack(true); err != nil {
-							this.log(logger).Error(fmt.Errorf("reject rabbitMq message: %v", err))
+							this.Consumer.log(logger).Error(fmt.Errorf("reject rabbitMq message: %v", err))
 						}
 					case Nack:
 						if err := message.Nack(true, true); err != nil {
-							this.log(logger).Error(fmt.Errorf("reject rabbitMq message: %v", err))
+							this.Consumer.log(logger).Error(fmt.Errorf("reject rabbitMq message: %v", err))
 						}
 					case Reject:
 						if err := message.Reject(true); err != nil {
-							this.log(logger).Error(fmt.Errorf("reject rabbitMq message: %v", err))
+							this.Consumer.log(logger).Error(fmt.Errorf("reject rabbitMq message: %v", err))
 						}
 					default:
-						this.log(logger).Fatal(fmt.Errorf("invalid consumer callback result"))
+						this.Consumer.log(logger).Fatal(fmt.Errorf("invalid consumer callback result"))
 					}
-					this.wg.Done()
+					this.Consumer.wg.Done()
 				} else {
 					consume = false
 				}
