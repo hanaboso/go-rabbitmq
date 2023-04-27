@@ -7,10 +7,6 @@ github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/google/renameio v0.1.0/go.mod h1:KWCgfxg9yswjAJkECMjeO8J8rahYeXnNhOm40UhjYkI=
 github.com/hanaboso/go-log v0.0.0-20200316105142-2513eeb2ee4e h1:PvL3hO5mVbpefmB7lcVEk6HmJQEz+ToOC5t95LHFIoQ=
 github.com/hanaboso/go-log v0.0.0-20200316105142-2513eeb2ee4e/go.mod h1:otGv7tgy2Ueue7BHuB4JRVdrfyDnCi60Jt33DuIS47Q=
-github.com/hanaboso/go-utils v0.0.0-20230117075856-e6a7c046c07d h1:GW3zLtNohQw65o6BX1s5wb2nrAfgCDeMQRDgEUZDeQc=
-github.com/hanaboso/go-utils v0.0.0-20230117075856-e6a7c046c07d/go.mod h1:fPyVsxcycn/+Ny1XDlpp/DYwXUrPDcY4jeyFXE3jS64=
-github.com/hanaboso/go-utils v0.0.0-20230117132444-eb28ee30f42b h1:FfvH9FpK0sC3A4oJCZ+SxiBlXe+8voWR+czVCVoMVZ8=
-github.com/hanaboso/go-utils v0.0.0-20230117132444-eb28ee30f42b/go.mod h1:fPyVsxcycn/+Ny1XDlpp/DYwXUrPDcY4jeyFXE3jS64=
 github.com/hanaboso/go-utils v0.0.0-20230130091007-6f3dd0f98846 h1:cUJAbk27WADxOD4mk2u+rUTYpi7J9IhBU926+R2va1o=
 github.com/hanaboso/go-utils v0.0.0-20230130091007-6f3dd0f98846/go.mod h1:fPyVsxcycn/+Ny1XDlpp/DYwXUrPDcY4jeyFXE3jS64=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
