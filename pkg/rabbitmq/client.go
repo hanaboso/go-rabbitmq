@@ -79,6 +79,24 @@ func (this *Client) Close() {
 	closeFn(this.pubConnection)
 }
 
+func (this *Client) Destroy() {
+	cleanUpConn := newConnection(this, this.address, this.logger)
+	this.Close()
+	channel := newChannel(cleanUpConn).channel
+
+	for _, exchange := range this.exchanges {
+		for _, binding := range exchange.Bindings {
+			_ = channel.QueueUnbind(binding.Queue, binding.Key, exchange.Name, binding.Args)
+		}
+		_ = channel.ExchangeDelete(exchange.Name, false, true)
+	}
+	for _, queue := range this.queues {
+		_, _ = channel.QueueDelete(queue.Name, false, false, true)
+	}
+	_ = channel.Close()
+	_ = cleanUpConn.connection.Close()
+}
+
 /*
 Exposes default amqp.Connection struct for edge cases
 Reconnect is not handled for this connection by itself as it gets replaces within a Client
