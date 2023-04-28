@@ -42,7 +42,7 @@ func (this *connection) connect(address string) {
 
 			err = <-connectionCheck
 			if err != nil {
-				this.logger.Debug(err.Error())
+				this.logger.Debug(fmt.Sprintf("%v", err))
 				goto RETRY
 			}
 
