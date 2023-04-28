@@ -81,8 +81,14 @@ func (this *Client) Close() {
 
 func (this *Client) Destroy() {
 	cleanUpConn := newConnection(this, this.address, this.logger)
+	cleanUpConn.awaitConnection()
+
+	channelObj := newChannel(cleanUpConn)
+	go channelObj.connect()
+	channelObj.awaitConnection()
+
+	channel := channelObj.channel
 	this.Close()
-	channel := newChannel(cleanUpConn).channel
 
 	for _, exchange := range this.exchanges {
 		for _, binding := range exchange.Bindings {
