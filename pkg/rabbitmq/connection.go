@@ -36,6 +36,7 @@ func (this *connection) connect(address string) {
 				goto RETRY
 			}
 
+			this.logger.Info("RabbitMq successfully connected")
 			this.connection = connection
 			connectionCheck = connection.NotifyClose(make(chan *amqp.Error))
 			retryCount = 0
