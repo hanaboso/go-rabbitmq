@@ -37,16 +37,47 @@ func TestClosePublisher(t *testing.T) {
 	preparePublisher()
 }
 
+func TestPublish(t *testing.T) {
+	preparePublisher()
+
+	//time.Sleep(1 * time.Second)
+
+	message := amqp.Publishing{
+		Headers: amqp.Table{
+			"foo": "bar",
+			"h1":  "k1",
+		},
+	}
+
+	err := publisher.Publish(message)
+	assert.Nil(t, err)
+}
+
 func checkPublisher(t *testing.T) {
 	err := publisher.Publish(amqp.Publishing{})
 	assert.Equal(t, nil, err)
 }
 
 func preparePublisher() {
-	publisher = client.NewPublisher(publish_key, "")
-	exchange = rabbitmq.Exchange{
+	queue := rabbitmq.Queue{
+		Name:    "test_queue",
+		Options: rabbitmq.DefaultQueueOptions,
+	}
+
+	client.AddQueue(queue)
+
+	publisher = client.NewPublisher(publish_key, "1")
+	exchange := rabbitmq.Exchange{
 		Name: publish_key,
 		Kind: amqp.ExchangeDirect,
+		Bindings: []rabbitmq.BindOptions{
+			{
+				Queue:  "test_queue",
+				Key:    "1",
+				NoWait: false,
+				Args:   nil,
+			},
+		},
 	}
 
 	client.AddExchange(exchange)

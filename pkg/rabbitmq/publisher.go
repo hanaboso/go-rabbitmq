@@ -48,12 +48,18 @@ func (this *Publisher) PublishExchangeRoutingKey(message amqp.Publishing, exchan
 
 		var ch *amqp.Channel
 		var confirm chan amqp.Confirmation
+		channelTries := 10
 		for {
 			ch = channel.channel
 			confirm = channel.confirm
 			if ch != nil {
 				break
 			}
+
+			if channelTries <= 0 {
+				return errors.New("channel retries exceeded")
+			}
+			channelTries--
 
 			<-time.After(time.Second)
 		}
@@ -63,13 +69,16 @@ func (this *Publisher) PublishExchangeRoutingKey(message amqp.Publishing, exchan
 			continue
 		}
 
-		ctx, _ := context.WithTimeout(context.Background(), time.Duration(this.timeout)*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(this.timeout)*time.Second)
 		if err := ch.PublishWithContext(ctx, exchange, routingKey, false, false, message); err != nil {
+			cancel()
+
 			return err
 		}
 
 		select {
-		case confirm, ok := <-confirm:
+		case confirmM, ok := <-confirm:
+			cancel()
 			if !ok {
 				if refreshErr := this.refreshExchange(); refreshErr != nil {
 					err = fmt.Errorf("channel closed or cannot confirm publish, binding: %v", refreshErr)
@@ -79,17 +88,23 @@ func (this *Publisher) PublishExchangeRoutingKey(message amqp.Publishing, exchan
 				continue
 			}
 
-			if confirm.DeliveryTag < channel.deliveryTag+1 {
-				err = fmt.Errorf("received unexpected delivery tag [want=%d, got=%d]", channel.deliveryTag+1, confirm.DeliveryTag)
+			channel.mu.Lock()
+			if confirmM.DeliveryTag < channel.deliveryTag+1 {
+				channel.mu.Unlock()
+				err = fmt.Errorf("received unexpected delivery tag [want=%d, got=%d]", channel.deliveryTag+1, confirmM.DeliveryTag)
 				continue
 			}
-			channel.deliveryTag = confirm.DeliveryTag
-			if !confirm.Ack {
+			channel.deliveryTag = confirmM.DeliveryTag
+			channel.mu.Unlock()
+
+			if !confirmM.Ack {
 				err = fmt.Errorf("publish not-ack")
 				continue
 			}
+
 			return nil
 		case <-ctx.Done():
+			cancel()
 			err = fmt.Errorf("publish timeout")
 			continue
 		}

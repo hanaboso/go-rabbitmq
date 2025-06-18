@@ -16,6 +16,7 @@ type channel struct {
 	refreshed   chan struct{}
 	open        bool
 	id          int
+	mu          sync.Mutex
 }
 
 func (this *channel) connect() {
