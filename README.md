@@ -39,6 +39,7 @@ func main() {
 
 	publisher := client.NewPublisher("asd", "")
 	_ = publisher.Publish(amqp.Publishing{})
+	_ = publisher.PublishBatch([]amqp.Publishing{{}, {}, {}})
 
 	consumer := client.NewConsumer("test", 10)
 
