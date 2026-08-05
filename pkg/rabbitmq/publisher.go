@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	log "github.com/hanaboso/go-log/pkg"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"time"
 )
 
 type Publisher struct {
@@ -40,33 +41,20 @@ func (this *Publisher) PublishExchangeRoutingKey(message amqp.Publishing, exchan
 	if retries < 0 {
 		retries = 10
 	}
+	closedRefunds := 10
 
 	for i := 0; i <= retries; i++ {
 		if !connector.open {
 			return errors.New("publisher closed")
 		}
 
-		var ch *amqp.Channel
-		var confirm chan amqp.Confirmation
-		channelTries := 10
-		for {
-			ch = channel.channel
-			confirm = channel.confirm
-			if ch != nil {
-				break
+		ch, confirm, live := awaitLiveChannel(channel)
+		if !live {
+			if !connector.open {
+				return errors.New("publisher closed")
 			}
 
-			if channelTries <= 0 {
-				return errors.New("channel retries exceeded")
-			}
-			channelTries--
-
-			<-time.After(time.Second)
-		}
-
-		if connector.connection.IsClosed() || ch.IsClosed() {
-			err = errors.New("disconnected")
-			continue
+			return errors.New("channel retries exceeded")
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(this.timeout)*time.Second)
@@ -80,9 +68,11 @@ func (this *Publisher) PublishExchangeRoutingKey(message amqp.Publishing, exchan
 		case confirmM, ok := <-confirm:
 			cancel()
 			if !ok {
+				err = errors.New("channel closed before publish confirmation")
 				if refreshErr := this.refreshExchange(); refreshErr != nil {
 					err = fmt.Errorf("channel closed or cannot confirm publish, binding: %v", refreshErr)
-				} else {
+				} else if closedRefunds > 0 {
+					closedRefunds--
 					i--
 				}
 				continue
@@ -92,6 +82,7 @@ func (this *Publisher) PublishExchangeRoutingKey(message amqp.Publishing, exchan
 			if confirmM.DeliveryTag < channel.deliveryTag+1 {
 				channel.mu.Unlock()
 				err = fmt.Errorf("received unexpected delivery tag [want=%d, got=%d]", channel.deliveryTag+1, confirmM.DeliveryTag)
+				channel.requestRefresh(10 * time.Second)
 				continue
 			}
 			channel.deliveryTag = confirmM.DeliveryTag
@@ -106,6 +97,7 @@ func (this *Publisher) PublishExchangeRoutingKey(message amqp.Publishing, exchan
 		case <-ctx.Done():
 			cancel()
 			err = fmt.Errorf("publish timeout")
+			channel.requestRefresh(10 * time.Second)
 			continue
 		}
 	}
@@ -115,23 +107,10 @@ func (this *Publisher) PublishExchangeRoutingKey(message amqp.Publishing, exchan
 
 func (this *Publisher) refreshExchange() error {
 	channelContainer := this.channel
-	connector := channelContainer.connection
-	channel := channelContainer.channel
-	logger := connector.logger
-	connection := connector.connection
-	client := connector.client
+	client := channelContainer.connection.client
 
-	if !connector.open || connection == nil || connection.IsClosed() {
-		this.log(logger).Debug("connection closed / not opened")
-	}
-
-	for {
-		if channel == nil || channel.IsClosed() {
-			channel = channelContainer.channel
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-		break
+	if _, _, live := awaitLiveChannel(channelContainer); !live {
+		return errors.New("channel is not available")
 	}
 
 	exchange, ok := client.exchanges[this.exchange]

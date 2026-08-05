@@ -6,6 +6,9 @@ type IPublisher interface {
 	Publish(message amqp.Publishing) error
 	PublishRoutingKey(message amqp.Publishing, routingKey string) error
 	PublishExchangeRoutingKey(message amqp.Publishing, exchange, routingKey string) error
+	PublishBatch(messages []amqp.Publishing) error
+	PublishBatchRoutingKey(messages []amqp.Publishing, routingKey string) error
+	PublishBatchExchangeRoutingKey(messages []amqp.Publishing, exchange, routingKey string) error
 	Close()
 }
 
@@ -26,6 +29,31 @@ func (this *PublisherMock) Publish(message amqp.Publishing) error {
 	}
 
 	return this.ReturnError
+}
+
+func (this *PublisherMock) PublishBatch(messages []amqp.Publishing) error {
+	var failed []int
+	var err error
+	for index, message := range messages {
+		if publishErr := this.Publish(message); publishErr != nil {
+			failed = append(failed, index)
+			err = publishErr
+		}
+	}
+
+	if len(failed) > 0 {
+		return &BatchPublishError{FailedIndexes: failed, Err: err}
+	}
+
+	return nil
+}
+
+func (this *PublisherMock) PublishBatchRoutingKey(messages []amqp.Publishing, _routingKey string) error {
+	return this.PublishBatch(messages)
+}
+
+func (this *PublisherMock) PublishBatchExchangeRoutingKey(messages []amqp.Publishing, _exchange, _routingKey string) error {
+	return this.PublishBatch(messages)
 }
 
 func (this *PublisherMock) PublishRoutingKey(message amqp.Publishing, _routingKey string) error {
