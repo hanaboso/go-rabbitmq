@@ -58,7 +58,7 @@ func (this *Publisher) PublishExchangeRoutingKey(message amqp.Publishing, exchan
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(this.timeout)*time.Second)
-		if err := ch.PublishWithContext(ctx, exchange, routingKey, false, false, message); err != nil {
+		if err := ch.PublishWithContext(context.Background(), exchange, routingKey, false, false, message); err != nil {
 			cancel()
 
 			return err
