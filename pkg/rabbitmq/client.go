@@ -99,14 +99,15 @@ func (this *Client) Destroy() {
 	for _, queue := range this.queues {
 		_, _ = channel.QueueDelete(queue.Name, false, false, true)
 	}
-	_ = channel.Close()
+	cleanUpConn.open = false
+	channelObj.close()
 	_ = cleanUpConn.connection.Close()
 }
 
 /*
 Exposes default amqp.Connection struct for edge cases
-Reconnect is not handled for this connection by itself as it gets replaces within a Client
-WARNING Closing connection will cause a deadlock
+The returned connection gets replaced within a Client on reconnect, do not keep a reference to it
+WARNING Closing connection will cause the Client to reconnect it and all its channels
 Do try to avoid this - use it for tests or other unique cases
 */
 func (this *Client) RawConnection() *amqp.Connection {

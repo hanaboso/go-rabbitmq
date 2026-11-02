@@ -52,8 +52,8 @@ func (this *channel) connect() {
 			goto RETRY
 		}
 
-		channelCheck = channel.NotifyClose(make(chan *amqp.Error))
-		channelCancelCheck = channel.NotifyCancel(make(chan string))
+		channelCheck = channel.NotifyClose(make(chan *amqp.Error, 1))
+		channelCancelCheck = channel.NotifyCancel(make(chan string, 1))
 		confirm = channel.NotifyPublish(make(chan amqp.Confirmation, confirmBufferCap))
 		this.mu.Lock()
 		this.confirm = confirm
@@ -73,6 +73,10 @@ func (this *channel) connect() {
 		case <-this.refreshReq:
 			_ = this.channel.Close()
 			continue
+		}
+
+		if this.open && this.connection.open {
+			goto RETRY
 		}
 
 		return
